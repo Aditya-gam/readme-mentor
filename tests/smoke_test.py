@@ -17,9 +17,9 @@ def test_project_structure() -> None:
     assert (project_root / "docs").exists(), "docs directory should exist"
 
     # Check app package is properly initialized
-    assert (
-        project_root / "app" / "__init__.py"
-    ).exists(), "app/__init__.py should exist"
+    assert (project_root / "app" / "__init__.py").exists(), (
+        "app/__init__.py should exist"
+    )
 
 
 def test_pyproject_toml_exists() -> None:

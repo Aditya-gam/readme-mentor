@@ -27,8 +27,7 @@ class Settings:
     RELOAD: bool = os.getenv("RELOAD", "false").lower() == "true"
 
     # Database settings
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", "sqlite:///./data/readme_mentor.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/readme_mentor.db")
 
     # API Keys
     GITHUB_TOKEN: Optional[str] = os.getenv("GITHUB_TOKEN")
@@ -42,7 +41,8 @@ class Settings:
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your_secret_key_here")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
-        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+    )
 
     # Development settings
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")

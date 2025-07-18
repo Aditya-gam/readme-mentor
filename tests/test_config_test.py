@@ -37,6 +37,7 @@ def test_load_dotenv_with_env_file():
 
         # Test that load_dotenv can be called with the env file
         from dotenv import load_dotenv
+
         load_dotenv(env_file)
 
         # Verify that environment variables are loaded
@@ -76,6 +77,7 @@ def test_settings_validation():
         import importlib
 
         import app.config
+
         importlib.reload(app.config)
 
         # This should not raise an exception
