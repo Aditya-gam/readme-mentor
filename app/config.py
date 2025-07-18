@@ -17,7 +17,7 @@ class Settings:
 
     # Application settings
     APP_NAME: str = os.getenv("APP_NAME", "readme-mentor")
-    APP_VERSION: str = os.getenv("APP_VERSION", "0.0.5")
+    APP_VERSION: str = os.getenv("APP_VERSION", "0.0.6")
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
