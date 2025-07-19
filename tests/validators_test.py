@@ -74,13 +74,17 @@ class TestValidateRepoURL:
 
     def test_whitespace_only_url_raises_value_error(self) -> None:
         """Test that URLs with only whitespace raise ValueError."""
-        with pytest.raises(ValueError, match="URL cannot be empty after trimming whitespace"):
+        with pytest.raises(
+            ValueError, match="URL cannot be empty after trimming whitespace"
+        ):
             validate_repo_url("   ")
 
     def test_non_github_domain_raises_invalid_repo_url_error(self) -> None:
         """Test that non-GitHub domains raise InvalidRepoURLError."""
         url = "https://gitlab.com/user/repo"
-        with pytest.raises(InvalidRepoURLError, match="URL must be a GitHub repository URL"):
+        with pytest.raises(
+            InvalidRepoURLError, match="URL must be a GitHub repository URL"
+        ):
             validate_repo_url(url)
 
     def test_url_with_branch_path_raises_invalid_repo_url_error(self) -> None:
@@ -251,31 +255,41 @@ class TestValidateRepoURL:
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_owner_starting_with_hyphen_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_owner_starting_with_hyphen_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with owner starting with hyphen raise InvalidRepoURLError."""
         url = "https://github.com/-invalid/repo"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_owner_ending_with_hyphen_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_owner_ending_with_hyphen_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with owner ending with hyphen raise InvalidRepoURLError."""
         url = "https://github.com/invalid-/repo"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_repo_starting_with_hyphen_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_repo_starting_with_hyphen_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with repo starting with hyphen raise InvalidRepoURLError."""
         url = "https://github.com/owner/-invalid"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_repo_ending_with_hyphen_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_repo_ending_with_hyphen_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with repo ending with hyphen raise InvalidRepoURLError."""
         url = "https://github.com/owner/invalid-"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_owner_starting_with_dot_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_owner_starting_with_dot_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with owner starting with dot raise InvalidRepoURLError."""
         url = "https://github.com/.invalid/repo"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
@@ -287,7 +301,9 @@ class TestValidateRepoURL:
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_repo_starting_with_dot_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_repo_starting_with_dot_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with repo starting with dot raise InvalidRepoURLError."""
         url = "https://github.com/owner/.invalid"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
@@ -299,25 +315,33 @@ class TestValidateRepoURL:
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_owner_starting_with_underscore_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_owner_starting_with_underscore_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with owner starting with underscore raise InvalidRepoURLError."""
         url = "https://github.com/_invalid/repo"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_owner_ending_with_underscore_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_owner_ending_with_underscore_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with owner ending with underscore raise InvalidRepoURLError."""
         url = "https://github.com/invalid_/repo"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_repo_starting_with_underscore_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_repo_starting_with_underscore_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with repo starting with underscore raise InvalidRepoURLError."""
         url = "https://github.com/owner/_invalid"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):
             validate_repo_url(url)
 
-    def test_url_with_repo_ending_with_underscore_raises_invalid_repo_url_error(self) -> None:
+    def test_url_with_repo_ending_with_underscore_raises_invalid_repo_url_error(
+        self,
+    ) -> None:
         """Test that URLs with repo ending with underscore raise InvalidRepoURLError."""
         url = "https://github.com/owner/invalid_"
         with pytest.raises(InvalidRepoURLError, match="URL must match pattern"):

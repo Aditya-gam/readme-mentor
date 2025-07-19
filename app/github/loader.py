@@ -111,9 +111,7 @@ def _matches_readme_pattern(filename: str) -> bool:
 
 
 def _get_files_recursively(
-    repo: Repository,
-    path: str,
-    default_branch: str
+    repo: Repository, path: str, default_branch: str
 ) -> List[Tuple[str, int]]:
     """
     Recursively get all files in a directory path.
@@ -134,9 +132,7 @@ def _get_files_recursively(
         for content in contents:
             if content.type == "dir":
                 # Recursively search subdirectories
-                sub_files = _get_files_recursively(
-                    repo, content.path, default_branch
-                )
+                sub_files = _get_files_recursively(repo, content.path, default_branch)
                 files.extend(sub_files)
             elif content.type == "file":
                 files.append((content.path, content.size))
@@ -148,9 +144,7 @@ def _get_files_recursively(
 
 
 def _download_file_content(
-    repo_url: str,
-    file_path: str,
-    default_branch: str
+    repo_url: str, file_path: str, default_branch: str
 ) -> Optional[bytes]:
     """
     Download file content from GitHub raw URL.
@@ -182,10 +176,7 @@ def _download_file_content(
         return None
 
 
-def _save_file_content(
-    content: bytes,
-    local_path: Path
-) -> bool:
+def _save_file_content(content: bytes, local_path: Path) -> bool:
     """
     Save file content to local path.
 
@@ -213,8 +204,7 @@ def _save_file_content(
 
 
 def fetch_repository_files(
-    repo_url: str,
-    file_glob: Tuple[str, ...] = ("README*", "docs/**/*.md")
+    repo_url: str, file_glob: Tuple[str, ...] = ("README*", "docs/**/*.md")
 ) -> List[str]:
     """
     Fetch repository files matching specified glob patterns.
@@ -287,13 +277,13 @@ def fetch_repository_files(
 
                     # Fallback: search for README files in root
                     try:
-                        root_contents = repo.get_contents(
-                            "", ref=default_branch)
+                        root_contents = repo.get_contents("", ref=default_branch)
                         for content in root_contents:
-                            if (content.type == "file" and
-                                _matches_readme_pattern(content.name) and
-                                    content.size <= MAX_FILE_SIZE):
-
+                            if (
+                                content.type == "file"
+                                and _matches_readme_pattern(content.name)
+                                and content.size <= MAX_FILE_SIZE
+                            ):
                                 file_content = _download_file_content(
                                     repo_url, content.path, default_branch
                                 )
@@ -302,20 +292,16 @@ def fetch_repository_files(
                                     if _save_file_content(file_content, local_path):
                                         saved_files.append(str(local_path))
                     except Exception as e2:
-                        logger.warning(
-                            f"Failed to search for README files: {e2}")
+                        logger.warning(f"Failed to search for README files: {e2}")
 
             elif pattern == "docs/**/*.md":
                 # Handle documentation files in docs directory
                 try:
                     # Get all files in docs directory recursively
-                    docs_files = _get_files_recursively(
-                        repo, "docs", default_branch)
+                    docs_files = _get_files_recursively(repo, "docs", default_branch)
 
                     for file_path, file_size in docs_files:
-                        if (_is_markdown_file(file_path) and
-                                file_size <= MAX_FILE_SIZE):
-
+                        if _is_markdown_file(file_path) and file_size <= MAX_FILE_SIZE:
                             content = _download_file_content(
                                 repo_url, file_path, default_branch
                             )

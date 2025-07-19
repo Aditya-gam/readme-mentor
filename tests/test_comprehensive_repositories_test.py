@@ -17,14 +17,11 @@ TEST_REPOSITORIES = {
     # 1. With README and docs
     "flask": "https://github.com/pallets/flask",
     "black": "https://github.com/psf/black",
-
     # 2. With just README, no docs
     "hello_world": "https://github.com/octocat/Hello-World",
     "test_tlb": "https://github.com/torvalds/test-tlb",
-
     # 3. With just docs, no README
     "kkomiyama": "https://github.com/kkomiyama/kkomiyama.github.io",
-
     # 4. Without README and docs
     "codedocs": "https://github.com/CodeDocs/CodeDocs",
     "no_readme": "https://github.com/gittertestbot/no-readme-markdown-file-2",
@@ -35,37 +32,37 @@ EXPECTED_RESULTS = {
     "flask": {
         "has_readme": True,
         "has_docs": False,  # Flask doesn't have docs/ directory
-        "min_files": 1,     # Just README
+        "min_files": 1,  # Just README
     },
     "black": {
         "has_readme": True,
         "has_docs": True,
-        "min_files": 27,    # README + 26 docs files
+        "min_files": 27,  # README + 26 docs files
     },
     "hello_world": {
         "has_readme": True,
         "has_docs": False,
-        "min_files": 1,     # Just README
+        "min_files": 1,  # Just README
     },
     "test_tlb": {
         "has_readme": True,
         "has_docs": False,
-        "min_files": 1,     # Just README
+        "min_files": 1,  # Just README
     },
     "kkomiyama": {
         "has_readme": False,
         "has_docs": True,
-        "min_files": 1,     # Just docs
+        "min_files": 1,  # Just docs
     },
     "codedocs": {
         "has_readme": False,
         "has_docs": False,
-        "min_files": 0,     # Empty repository
+        "min_files": 0,  # Empty repository
     },
     "no_readme": {
         "has_readme": False,
         "has_docs": False,
-        "min_files": 0,     # No README or docs
+        "min_files": 0,  # No README or docs
     },
 }
 
@@ -91,13 +88,12 @@ class TestURLValidator:
         """Test URL validation with edge cases."""
         test_cases = [
             # Valid variations
-            ("https://GITHUB.COM/pallets/flask",
-             "https://github.com/pallets/flask"),
-            ("https://github.com/pallets/flask/",
-             "https://github.com/pallets/flask"),
-            ("  https://github.com/pallets/flask  ",
-             "https://github.com/pallets/flask"),
-
+            ("https://GITHUB.COM/pallets/flask", "https://github.com/pallets/flask"),
+            ("https://github.com/pallets/flask/", "https://github.com/pallets/flask"),
+            (
+                "  https://github.com/pallets/flask  ",
+                "https://github.com/pallets/flask",
+            ),
             # Invalid cases
             ("https://github.com/pallets/flask/tree/main", None),
             ("https://github.com/pallets/flask/blob/main/README.md", None),
@@ -118,8 +114,7 @@ class TestURLValidator:
                 # Should return normalized URL
                 result = validate_repo_url(input_url)
                 assert result == expected, f"URL normalization failed for {input_url}"
-                logger.info(
-                    f"✅ URL normalization passed: {input_url} -> {result}")
+                logger.info(f"✅ URL normalization passed: {input_url} -> {result}")
 
 
 class TestGitHubLoader:
@@ -131,10 +126,10 @@ class TestGitHubLoader:
         results = {}
 
         for repo_name, url in TEST_REPOSITORIES.items():
-            logger.info(f"\n{'='*60}")
+            logger.info(f"\n{'=' * 60}")
             logger.info(f"Testing repository: {repo_name}")
             logger.info(f"URL: {url}")
-            logger.info(f"{'='*60}")
+            logger.info(f"{'=' * 60}")
 
             try:
                 # Fetch files from repository
@@ -177,9 +172,9 @@ class TestGitHubLoader:
 
     def _verify_results_against_expectations(self, results):
         """Verify that results match expected behavior."""
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info("VERIFICATION RESULTS")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
 
         for repo_name, result in results.items():
             expected = EXPECTED_RESULTS[repo_name]
@@ -190,7 +185,8 @@ class TestGitHubLoader:
 
             if "error" in result:
                 logger.warning(
-                    f"⚠️  {repo_name}: Test failed with error - {result['error']}")
+                    f"⚠️  {repo_name}: Test failed with error - {result['error']}"
+                )
                 continue
 
             # Verify file count
@@ -231,19 +227,18 @@ class TestGitHubLoader:
             logger.info(f"\nTesting pattern: {pattern}")
 
             try:
-                saved_files = fetch_repository_files(
-                    test_url, file_glob=pattern)
+                saved_files = fetch_repository_files(test_url, file_glob=pattern)
 
-                logger.info(
-                    f"Pattern {pattern}: Saved {len(saved_files)} files")
+                logger.info(f"Pattern {pattern}: Saved {len(saved_files)} files")
                 if saved_files:
                     logger.info(f"Files: {saved_files}")
 
                 # Verify that files match the pattern
                 if "README*" in pattern:
                     readme_files = [f for f in saved_files if "README" in f]
-                    assert len(
-                        readme_files) > 0, "README pattern should find README files"
+                    assert len(readme_files) > 0, (
+                        "README pattern should find README files"
+                    )
 
                 if "docs/**/*.md" in pattern:
                     docs_files = [f for f in saved_files if "docs/" in f]
@@ -272,8 +267,7 @@ class TestGitHubLoader:
                         f"File {file_path} exceeds 1MB limit: {file_size} bytes"
                     )
 
-                    logger.info(
-                        f"✅ File {file_path}: {file_size} bytes (under limit)")
+                    logger.info(f"✅ File {file_path}: {file_size} bytes (under limit)")
 
         except Exception as e:
             logger.error(f"File size test failed: {e}")
@@ -315,8 +309,7 @@ class TestIntegration:
 
                 # Step 2: Fetch files
                 saved_files = fetch_repository_files(validated_url)
-                logger.info(
-                    f"✅ File fetching completed: {len(saved_files)} files")
+                logger.info(f"✅ File fetching completed: {len(saved_files)} files")
 
                 # Step 3: Verify results
                 expected = EXPECTED_RESULTS[repo_name]

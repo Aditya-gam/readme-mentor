@@ -14,8 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 logger = logging.getLogger(__name__)
@@ -40,10 +39,10 @@ def investigate_repository_structure():
     results = {}
 
     for repo_name, url in TEST_REPOSITORIES.items():
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Investigating: {repo_name}")
         print(f"URL: {url}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         try:
             # Validate URL first
@@ -56,8 +55,9 @@ def investigate_repository_structure():
             # Analyze structure
             readme_files = [f for f in saved_files if "README" in f]
             docs_files = [f for f in saved_files if "docs/" in f]
-            all_md_files = [f for f in saved_files if f.endswith(
-                ('.md', '.markdown', '.mdx'))]
+            all_md_files = [
+                f for f in saved_files if f.endswith((".md", ".markdown", ".mdx"))
+            ]
 
             result = {
                 "total_files": len(saved_files),
@@ -81,8 +81,11 @@ def investigate_repository_structure():
             if saved_files:
                 print("   - Files saved:")
                 for file_path in saved_files:
-                    file_size = Path(file_path).stat().st_size if Path(
-                        file_path).exists() else 0
+                    file_size = (
+                        Path(file_path).stat().st_size
+                        if Path(file_path).exists()
+                        else 0
+                    )
                     print(f"     * {file_path} ({file_size} bytes)")
 
             # Check if files exist on disk
@@ -99,18 +102,18 @@ def investigate_repository_structure():
             results[repo_name] = {"error": str(e)}
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for repo_name, result in results.items():
         if "error" in result:
             print(f"❌ {repo_name}: {result['error']}")
         else:
             print(f"✅ {repo_name}: {result['total_files']} files")
-            if result['has_readme']:
+            if result["has_readme"]:
                 print(f"   - Has README: {result['readme_files']}")
-            if result['has_docs']:
+            if result["has_docs"]:
                 print(f"   - Has docs: {result['docs_files']}")
 
     return results
@@ -118,9 +121,9 @@ def investigate_repository_structure():
 
 def suggest_updated_expectations(results):
     """Suggest updated expectations based on actual results."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SUGGESTED UPDATED EXPECTATIONS")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     expectations = {}
 
