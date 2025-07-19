@@ -6,6 +6,8 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
+from .version import get_version
+
 # Load environment variables from .env file if it exists
 # This will not raise exceptions if .env file doesn't exist
 env_path = Path(__file__).parent.parent / ".env"
@@ -15,42 +17,45 @@ load_dotenv(env_path)
 class Settings:
     """Application settings loaded from environment variables."""
 
-    # Application settings
-    APP_NAME: str = os.getenv("APP_NAME", "readme-mentor")
-    APP_VERSION: str = os.getenv("APP_VERSION", "0.0.6")
-    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    def __init__(self):
+        """Initialize settings from environment variables."""
+        # Application settings
+        self.APP_NAME: str = os.getenv("APP_NAME", "readme-mentor")
+        self.APP_VERSION: str = get_version()
+        self.DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+        self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-    # Server settings
-    HOST: str = os.getenv("HOST", "0.0.0.0")
-    PORT: int = int(os.getenv("PORT", "8000"))
-    RELOAD: bool = os.getenv("RELOAD", "false").lower() == "true"
+        # Server settings
+        self.HOST: str = os.getenv("HOST", "0.0.0.0")
+        self.PORT: int = int(os.getenv("PORT", "8000"))
+        self.RELOAD: bool = os.getenv("RELOAD", "false").lower() == "true"
 
-    # Database settings
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/readme_mentor.db")
+        # Database settings
+        self.DATABASE_URL: str = os.getenv(
+            "DATABASE_URL", "sqlite:///./data/readme_mentor.db"
+        )
 
-    # API Keys
-    GITHUB_TOKEN: Optional[str] = os.getenv("GITHUB_TOKEN")
-    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
+        # API Keys
+        self.GITHUB_TOKEN: Optional[str] = os.getenv("GITHUB_TOKEN")
+        self.OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
 
-    # External services
-    CHROMA_DB_HOST: str = os.getenv("CHROMA_DB_HOST", "localhost")
-    CHROMA_DB_PORT: int = int(os.getenv("CHROMA_DB_PORT", "8000"))
+        # External services
+        self.CHROMA_DB_HOST: str = os.getenv("CHROMA_DB_HOST", "localhost")
+        self.CHROMA_DB_PORT: int = int(os.getenv("CHROMA_DB_PORT", "8000"))
 
-    # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your_secret_key_here")
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
-        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
-    )
+        # Security
+        self.SECRET_KEY: str = os.getenv("SECRET_KEY", "your_secret_key_here")
+        self.ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+        self.ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+            os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+        )
 
-    # Development settings
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+        # Development settings
+        self.ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 
-    @classmethod
-    def validate(cls) -> None:
+    def validate(self) -> None:
         """Validate required settings."""
-        if not cls.SECRET_KEY or cls.SECRET_KEY == "your_secret_key_here":
+        if not self.SECRET_KEY or self.SECRET_KEY == "your_secret_key_here":
             raise ValueError("SECRET_KEY must be set in environment variables")
 
 

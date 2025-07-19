@@ -24,16 +24,20 @@ def test_load_dotenv_without_env_file():
 
             # Clear the app modules from sys.modules to force re-import
             for module_name in list(sys.modules.keys()):
-                if module_name.startswith('app'):
+                if module_name.startswith("app"):
                     del sys.modules[module_name]
 
             # This should not raise any exceptions even without .env file
 
+            # Create a new settings instance to test with current version
+            from app.config import Settings
+
+            test_settings = Settings()
+
             # Verify that default values are used
-            assert settings.APP_NAME == "readme-mentor"
-            assert settings.APP_VERSION == "0.0.6"
-            assert settings.DEBUG is False
-            assert settings.LOG_LEVEL == "INFO"
+            assert test_settings.APP_NAME == "readme-mentor"
+            assert test_settings.DEBUG is False
+            assert test_settings.LOG_LEVEL == "INFO"
         finally:
             os.chdir(original_cwd)
 
@@ -99,15 +103,16 @@ def test_dotenv_import_error_handling():
         if module_name.startswith("app"):
             del sys.modules[module_name]
 
-    # Mock ImportError for dotenv
-    with patch(
-        "dotenv.load_dotenv", side_effect=ImportError("No module named 'dotenv'")
-    ):
+    # Mock ImportError for dotenv at the module import level
+    with patch.dict(sys.modules, {"dotenv": None}):
         # This should not raise an exception, just log a warning
+        # The app/__init__.py should handle the missing dotenv gracefully
 
-        # Verify that default values are still used
-        assert settings.APP_NAME == "readme-mentor"
-        assert settings.APP_VERSION == "0.0.6"
+        # Test that the app module can be imported without dotenv
+        import app
+
+        # Verify that the app module is imported successfully
+        assert app is not None
 
 
 def test_dotenv_file_error_handling():
@@ -129,9 +134,11 @@ def test_dotenv_file_error_handling():
 
             # This should not raise an exception, just log a warning
 
+            # Create a new settings instance to test with current version
+            test_settings = Settings()
+
             # Verify that default values are still used
-            assert settings.APP_NAME == "readme-mentor"
-            assert settings.APP_VERSION == "0.0.6"
+            assert test_settings.APP_NAME == "readme-mentor"
         finally:
             os.chdir(original_cwd)
 
@@ -155,28 +162,30 @@ def test_env_file_presence_detection():
 
 def test_settings_default_values():
     """Test that Settings class provides correct default values."""
+    # Create a new settings instance to test with current version
+    test_settings = Settings()
+
     # Test that default values are set correctly
-    assert settings.APP_NAME == "readme-mentor"
-    assert settings.APP_VERSION == "0.0.6"
-    assert settings.DEBUG is False
-    assert settings.LOG_LEVEL == "INFO"
-    assert settings.HOST == "0.0.0.0"
-    assert settings.PORT == 8000
-    assert settings.RELOAD is False
-    assert settings.DATABASE_URL == "sqlite:///./data/readme_mentor.db"
-    assert settings.CHROMA_DB_HOST == "localhost"
-    assert settings.CHROMA_DB_PORT == 8000
-    assert settings.SECRET_KEY == "your_secret_key_here"
-    assert settings.ALGORITHM == "HS256"
-    assert settings.ACCESS_TOKEN_EXPIRE_MINUTES == 30
-    assert settings.ENVIRONMENT == "development"
+    assert test_settings.APP_NAME == "readme-mentor"
+    assert test_settings.DEBUG is False
+    assert test_settings.LOG_LEVEL == "INFO"
+    assert test_settings.HOST == "0.0.0.0"
+    assert test_settings.PORT == 8000
+    assert test_settings.RELOAD is False
+    assert test_settings.DATABASE_URL == "sqlite:///./data/readme_mentor.db"
+    assert test_settings.CHROMA_DB_HOST == "localhost"
+    assert test_settings.CHROMA_DB_PORT == 8000
+    assert test_settings.SECRET_KEY == "your_secret_key_here"
+    assert test_settings.ALGORITHM == "HS256"
+    assert test_settings.ACCESS_TOKEN_EXPIRE_MINUTES == 30
+    assert test_settings.ENVIRONMENT == "development"
 
 
 def test_settings_validation():
     """Test that Settings validation works correctly."""
     # Test with default secret key (should raise ValueError)
     with pytest.raises(ValueError, match="SECRET_KEY must be set"):
-        Settings.validate()
+        settings.validate()
 
     # Test with proper secret key
     with patch.dict(os.environ, {"SECRET_KEY": "proper_secret_key"}):
@@ -188,16 +197,14 @@ def test_settings_validation():
         importlib.reload(app.config)
 
         # This should not raise an exception
-        app.config.Settings.validate()
+        app.config.settings.validate()
 
 
 def test_required_api_keys_handling():
     """Test that required API keys are properly handled."""
     # Test that API keys can be None (optional for development)
-    assert settings.GITHUB_TOKEN is None or isinstance(
-        settings.GITHUB_TOKEN, str)
-    assert settings.OPENAI_API_KEY is None or isinstance(
-        settings.OPENAI_API_KEY, str)
+    assert settings.GITHUB_TOKEN is None or isinstance(settings.GITHUB_TOKEN, str)
+    assert settings.OPENAI_API_KEY is None or isinstance(settings.OPENAI_API_KEY, str)
 
     # Test that API keys can be set via environment
     with patch.dict(
@@ -214,12 +221,9 @@ def test_required_api_keys_handling():
         assert app.config.settings.OPENAI_API_KEY == "test_openai_key"
 
 
-def test_app_version_and_environment_functions():
-    """Test the utility functions in app/__init__.py."""
+def test_environment_functions():
+    """Test the environment utility functions in app/__init__.py."""
     import app
-
-    # Test version function
-    assert app.get_version() == "0.0.6"
 
     # Test environment function
     assert app.get_environment() == "development"
