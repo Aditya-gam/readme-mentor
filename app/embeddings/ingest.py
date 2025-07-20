@@ -9,9 +9,9 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from ..github.loader import fetch_repository_files
@@ -288,17 +288,23 @@ def ingest_repository(
 
     # Create vector store
     logger.info("Creating vector store...")
-    if persist_directory is None:
-        persist_directory = str(_create_persist_directory(repo_slug))
     if collection_name is None:
         collection_name = _generate_collection_name(repo_slug)
 
     # Create ChromaDB vector store
-    vectorstore = Chroma(
-        collection_name=collection_name,
-        embedding_function=embedding_model,
-        persist_directory=persist_directory,
-    )
+    if persist_directory is None:
+        # Use in-memory storage
+        vectorstore = Chroma(
+            collection_name=collection_name,
+            embedding_function=embedding_model,
+        )
+    else:
+        # Use persistent storage
+        vectorstore = Chroma(
+            collection_name=collection_name,
+            embedding_function=embedding_model,
+            persist_directory=persist_directory,
+        )
 
     # Add documents to the vector store
     texts = [doc.page_content for doc in all_documents]

@@ -9,8 +9,8 @@ import shutil
 from pathlib import Path
 
 import pytest
-from langchain.schema import Document
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
 
 from app.embeddings.ingest import ingest_repository
 
@@ -64,10 +64,9 @@ def test_ingest_repository_basic(clean_data_dir, unique_collection_name):
 
     # Verify data directory structure
     raw_dir = clean_data_dir / TEST_REPO_SLUG / "raw"
-    chroma_dir = clean_data_dir / TEST_REPO_SLUG / "chroma"
 
     assert raw_dir.exists(), f"Raw directory not created: {raw_dir}"
-    assert chroma_dir.exists(), f"Chroma directory not created: {chroma_dir}"
+    # Note: chroma_dir is not created when using in-memory storage
 
     # Verify at least one file was downloaded
     raw_files = list(raw_dir.rglob("*"))
@@ -273,7 +272,10 @@ def test_ingest_repository_error_handling():
     # Test with invalid repository URL
     invalid_url = "https://github.com/nonexistent/repository"
 
-    with pytest.raises((ValueError, RuntimeError)):
+    # Import the exception that will be raised
+    from github.GithubException import UnknownObjectException
+
+    with pytest.raises(UnknownObjectException):
         ingest_repository(invalid_url)
 
     logger.info("Error handling test completed")
