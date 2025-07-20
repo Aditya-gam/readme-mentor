@@ -299,7 +299,7 @@ def remove_fenced_code_blocks(content: str, include_code: bool = False) -> str:
     lines = content.split("\n")
     result_lines = []
     in_code_block = False
-    code_fence_pattern = r"^```[a-zA-Z0-9_]*$"
+    code_fence_pattern = r"^```\w*$"
 
     for line in lines:
         if re.match(code_fence_pattern, line.strip()):
@@ -315,6 +315,44 @@ def remove_fenced_code_blocks(content: str, include_code: bool = False) -> str:
             result_lines.append(line)
 
     return "\n".join(result_lines)
+
+
+def _is_indented_code_line(line: str) -> bool:
+    """Check if a line is indented code (4+ spaces or tab).
+
+    Args:
+        line: Line to check
+
+    Returns:
+        True if line is indented code, False otherwise
+    """
+    stripped = line.strip()
+    return (
+        (line.startswith("    ") or line.startswith("\t"))
+        and stripped != ""
+        # Don't treat indented comments as code
+        and not line.startswith("    #")
+    )
+
+
+def _process_line_in_code_block(
+    line: str, stripped: str, is_indented_code: bool
+) -> tuple[str, bool]:
+    """Process a line that's inside a code block.
+
+    Args:
+        line: Current line
+        stripped: Stripped version of the line
+        is_indented_code: Whether the line is indented code
+
+    Returns:
+        Tuple of (processed_line, new_in_code_block_state)
+    """
+    if stripped == "" or not is_indented_code:
+        # End of code block
+        return line, False
+    # Inside code block, replace with empty line
+    return "", True
 
 
 def remove_indented_code_blocks(content: str, include_code: bool = False) -> str:
@@ -336,30 +374,16 @@ def remove_indented_code_blocks(content: str, include_code: bool = False) -> str
 
     for line in lines:
         stripped = line.strip()
-
-        # Check if line is indented code (4+ spaces or tab)
-        is_indented_code = (
-            (line.startswith("    ") or line.startswith("\t"))
-            and stripped != ""
-            and
-            # Don't treat indented comments as code
-            not line.startswith("    #")
-        )
+        is_indented_code = _is_indented_code_line(line)
 
         if is_indented_code and not in_code_block:
             in_code_block = True
 
         if in_code_block:
-            if stripped == "" or not is_indented_code:
-                # End of code block
-                in_code_block = False
-                if stripped == "":
-                    result_lines.append(line)  # Keep empty lines
-                else:
-                    result_lines.append(line)  # Keep non-code content
-            else:
-                # Inside code block, replace with empty line
-                result_lines.append("")
+            processed_line, in_code_block = _process_line_in_code_block(
+                line, stripped, is_indented_code
+            )
+            result_lines.append(processed_line)
         else:
             result_lines.append(line)
 

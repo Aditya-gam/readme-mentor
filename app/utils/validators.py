@@ -2,6 +2,9 @@
 
 import re
 
+# Constants
+GITHUB_BASE_URL = "https://github.com/"
+
 
 class InvalidRepoURLError(ValueError):
     """Custom exception for invalid repository URLs."""
@@ -79,10 +82,10 @@ def _normalize_github_url(url: str) -> str:
         ValueError: If the URL is not a valid GitHub URL
     """
     # Convert domain to lowercase
-    if url.lower().startswith("https://github.com/"):
-        normalized = "https://github.com/" + url[19:]
+    if url.lower().startswith(GITHUB_BASE_URL):
+        normalized = GITHUB_BASE_URL + url[19:]
     elif url.lower().startswith("http://github.com/"):
-        normalized = "https://github.com/" + url[18:]
+        normalized = GITHUB_BASE_URL + url[18:]
     else:
         raise ValueError("URL must be a GitHub repository URL")
 
@@ -105,7 +108,8 @@ def _is_valid_github_repo_url(url: str) -> bool:
     # Pattern: https://github.com/<owner>/<repo>
     # Owner and repo names can contain alphanumeric, hyphens, underscores, dots
     # but cannot start or end with hyphens, dots, or underscores
-    pattern = r"^https://github\.com/[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?/[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$"
+    escaped_base_url = GITHUB_BASE_URL.replace("/", r"\/")
+    pattern = rf"^{escaped_base_url}[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?/[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$"
 
     if not re.match(pattern, url):
         return False

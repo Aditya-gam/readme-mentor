@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 import httpx
-from github import Github
+from github import Auth, Github
 from github.Repository import Repository
 
 from ..config import settings
@@ -203,6 +203,145 @@ def _save_file_content(content: bytes, local_path: Path) -> bool:
         return False
 
 
+def _process_readme_pattern(
+    repo: Repository, repo_url: str, default_branch: str, data_dir: Path
+) -> List[str]:
+    """
+    Process README* pattern and return list of saved file paths.
+
+    Args:
+        repo: GitHub repository object
+        repo_url: Repository URL
+        default_branch: Default branch name
+        data_dir: Local data directory
+
+    Returns:
+        List of successfully saved file paths
+    """
+    saved_files = []
+
+    try:
+        # Try to get README using GitHub API
+        readme = repo.get_readme()
+        if readme and readme.size <= MAX_FILE_SIZE:
+            content = _download_file_content(repo_url, readme.path, default_branch)
+            if content:
+                local_path = data_dir / readme.path
+                if _save_file_content(content, local_path):
+                    saved_files.append(str(local_path))
+        else:
+            logger.warning(f"README file too large ({readme.size} bytes) or not found")
+    except Exception as e:
+        logger.warning(f"Failed to get README: {e}")
+        # Fallback: search for README files in root
+        saved_files.extend(
+            _search_readme_files(repo, repo_url, default_branch, data_dir)
+        )
+
+    return saved_files
+
+
+def _search_readme_files(
+    repo: Repository, repo_url: str, default_branch: str, data_dir: Path
+) -> List[str]:
+    """
+    Search for README files in repository root as fallback.
+
+    Args:
+        repo: GitHub repository object
+        repo_url: Repository URL
+        default_branch: Default branch name
+        data_dir: Local data directory
+
+    Returns:
+        List of successfully saved file paths
+    """
+    saved_files = []
+
+    try:
+        root_contents = repo.get_contents("", ref=default_branch)
+        for content in root_contents:
+            if (
+                content.type == "file"
+                and _matches_readme_pattern(content.name)
+                and content.size <= MAX_FILE_SIZE
+            ):
+                file_content = _download_file_content(
+                    repo_url, content.path, default_branch
+                )
+                if file_content:
+                    local_path = data_dir / content.path
+                    if _save_file_content(file_content, local_path):
+                        saved_files.append(str(local_path))
+    except Exception as e:
+        logger.warning(f"Failed to search for README files: {e}")
+
+    return saved_files
+
+
+def _process_docs_pattern(
+    repo: Repository, repo_url: str, default_branch: str, data_dir: Path
+) -> List[str]:
+    """
+    Process docs/**/*.md pattern and return list of saved file paths.
+
+    Args:
+        repo: GitHub repository object
+        repo_url: Repository URL
+        default_branch: Default branch name
+        data_dir: Local data directory
+
+    Returns:
+        List of successfully saved file paths
+    """
+    saved_files = []
+
+    try:
+        # Get all files in docs directory recursively
+        docs_files = _get_files_recursively(repo, "docs", default_branch)
+
+        for file_path, file_size in docs_files:
+            if _is_markdown_file(file_path) and file_size <= MAX_FILE_SIZE:
+                content = _download_file_content(repo_url, file_path, default_branch)
+                if content:
+                    local_path = data_dir / file_path
+                    if _save_file_content(content, local_path):
+                        saved_files.append(str(local_path))
+            elif file_size > MAX_FILE_SIZE:
+                logger.info(f"Skipping large file: {file_path} ({file_size} bytes)")
+    except Exception as e:
+        logger.warning(f"Failed to process docs directory: {e}")
+
+    return saved_files
+
+
+def _process_pattern(
+    pattern: str, repo: Repository, repo_url: str, default_branch: str, data_dir: Path
+) -> List[str]:
+    """
+    Process a single glob pattern and return list of saved file paths.
+
+    Args:
+        pattern: Glob pattern to process
+        repo: GitHub repository object
+        repo_url: Repository URL
+        default_branch: Default branch name
+        data_dir: Local data directory
+
+    Returns:
+        List of successfully saved file paths
+    """
+    logger.info(f"Processing pattern: {pattern}")
+
+    if pattern == "README*":
+        return _process_readme_pattern(repo, repo_url, default_branch, data_dir)
+    elif pattern == "docs/**/*.md":
+        return _process_docs_pattern(repo, repo_url, default_branch, data_dir)
+    else:
+        logger.warning(f"Unsupported pattern: {pattern}")
+        return []
+
+
 def fetch_repository_files(
     repo_url: str, file_glob: Tuple[str, ...] = ("README*", "docs/**/*.md")
 ) -> List[str]:
@@ -229,7 +368,7 @@ def fetch_repository_files(
     # Initialize GitHub client
     github_token = settings.GITHUB_TOKEN
     if github_token:
-        github_client = Github(github_token)
+        github_client = Github(auth=Auth.Token(github_token))
         logger.info("Using GitHub token for API access")
     else:
         github_client = Github()
@@ -253,69 +392,10 @@ def fetch_repository_files(
 
         # Process each glob pattern
         for pattern in file_glob:
-            logger.info(f"Processing pattern: {pattern}")
-
-            if pattern == "README*":
-                # Handle README files in repository root
-                try:
-                    # Try to get README using GitHub API
-                    readme = repo.get_readme()
-                    if readme and readme.size <= MAX_FILE_SIZE:
-                        content = _download_file_content(
-                            repo_url, readme.path, default_branch
-                        )
-                        if content:
-                            local_path = data_dir / readme.path
-                            if _save_file_content(content, local_path):
-                                saved_files.append(str(local_path))
-                    else:
-                        logger.warning(
-                            f"README file too large ({readme.size} bytes) or not found"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to get README: {e}")
-
-                    # Fallback: search for README files in root
-                    try:
-                        root_contents = repo.get_contents("", ref=default_branch)
-                        for content in root_contents:
-                            if (
-                                content.type == "file"
-                                and _matches_readme_pattern(content.name)
-                                and content.size <= MAX_FILE_SIZE
-                            ):
-                                file_content = _download_file_content(
-                                    repo_url, content.path, default_branch
-                                )
-                                if file_content:
-                                    local_path = data_dir / content.path
-                                    if _save_file_content(file_content, local_path):
-                                        saved_files.append(str(local_path))
-                    except Exception as e2:
-                        logger.warning(f"Failed to search for README files: {e2}")
-
-            elif pattern == "docs/**/*.md":
-                # Handle documentation files in docs directory
-                try:
-                    # Get all files in docs directory recursively
-                    docs_files = _get_files_recursively(repo, "docs", default_branch)
-
-                    for file_path, file_size in docs_files:
-                        if _is_markdown_file(file_path) and file_size <= MAX_FILE_SIZE:
-                            content = _download_file_content(
-                                repo_url, file_path, default_branch
-                            )
-                            if content:
-                                local_path = data_dir / file_path
-                                if _save_file_content(content, local_path):
-                                    saved_files.append(str(local_path))
-                        elif file_size > MAX_FILE_SIZE:
-                            logger.info(
-                                f"Skipping large file: {file_path} ({file_size} bytes)"
-                            )
-
-                except Exception as e:
-                    logger.warning(f"Failed to process docs directory: {e}")
+            pattern_files = _process_pattern(
+                pattern, repo, repo_url, default_branch, data_dir
+            )
+            saved_files.extend(pattern_files)
 
         logger.info(f"Successfully saved {len(saved_files)} files")
         return saved_files
