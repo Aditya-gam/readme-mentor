@@ -5,12 +5,197 @@ unwanted sections while preserving line numbers for citation purposes.
 """
 
 import re
+from bisect import bisect_right
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import chardet
 from bs4 import BeautifulSoup
 from markdown_it import MarkdownIt
+
+
+@dataclass
+class CleanedDocument:
+    """Represents a cleaned Markdown document with line offset mapping.
+
+    This class holds the cleaned text content along with metadata and
+    line offset information for citation purposes.
+
+    Attributes:
+        text: The cleaned text content
+        path: Optional path to the original file
+        line_offsets: List of character offsets for each line start
+        metadata: Additional processing metadata
+    """
+
+    text: str
+    path: Optional[Path]
+    line_offsets: List[int]
+    metadata: Dict[str, Any]
+
+    def __post_init__(self) -> None:
+        """Validate and compute line offsets if not provided."""
+        if not self.line_offsets:
+            self.line_offsets = self._compute_line_offsets()
+
+    def _compute_line_offsets(self) -> List[int]:
+        """Compute character offsets for the start of each line.
+
+        Returns:
+            List where each element is the character offset of the start
+            of the corresponding line (0-indexed).
+        """
+        offsets = [0]  # First line always starts at offset 0
+        current_offset = 0
+
+        for char in self.text:
+            current_offset += 1
+            if char == "\n":
+                offsets.append(current_offset)
+
+        return offsets
+
+    def get_line_range(self, start_char: int, end_char: int) -> Tuple[int, int]:
+        """Get the line range corresponding to a character range.
+
+        Args:
+            start_char: Starting character offset (inclusive)
+            end_char: Ending character offset (exclusive)
+
+        Returns:
+            Tuple of (start_line, end_line) where both are 0-indexed
+
+        Raises:
+            ValueError: If start_char or end_char are invalid
+        """
+        if start_char < 0 or end_char < 0:
+            raise ValueError("Character offsets must be non-negative")
+        if start_char >= end_char:
+            raise ValueError("start_char must be less than end_char")
+        if end_char > len(self.text):
+            raise ValueError("end_char exceeds text length")
+
+        # Find the line containing start_char
+        start_line = bisect_right(self.line_offsets, start_char) - 1
+        if start_line < 0:
+            start_line = 0
+
+        # Find the line containing end_char
+        end_line = bisect_right(self.line_offsets, end_char) - 1
+        if end_line < 0:
+            end_line = 0
+
+        return start_line, end_line
+
+    def get_line_content(self, line_number: int) -> str:
+        """Get the content of a specific line.
+
+        Args:
+            line_number: 0-indexed line number
+
+        Returns:
+            Content of the specified line
+
+        Raises:
+            IndexError: If line_number is out of range
+        """
+        if line_number < 0 or line_number >= len(self.line_offsets):
+            raise IndexError(f"Line number {line_number} out of range")
+
+        start_offset = self.line_offsets[line_number]
+        if line_number + 1 < len(self.line_offsets):
+            end_offset = self.line_offsets[line_number + 1]
+        else:
+            end_offset = len(self.text)
+
+        return self.text[start_offset:end_offset].rstrip("\n")
+
+
+class LineOffsetMapper:
+    """Maps character offsets to line numbers in text content.
+
+    This class provides efficient mapping between character positions
+    and line numbers using binary search for optimal performance.
+    """
+
+    def __init__(self, text: str):
+        """Initialize the mapper with text content.
+
+        Args:
+            text: The text content to map
+        """
+        self.text = text
+        self.line_offsets = self._compute_line_offsets()
+
+    def _compute_line_offsets(self) -> List[int]:
+        """Compute character offsets for the start of each line.
+
+        Returns:
+            List where each element is the character offset of the start
+            of the corresponding line (0-indexed).
+        """
+        offsets = [0]  # First line always starts at offset 0
+        current_offset = 0
+
+        for char in self.text:
+            current_offset += 1
+            if char == "\n":
+                offsets.append(current_offset)
+
+        return offsets
+
+    def get_line_range(self, start_char: int, end_char: int) -> Tuple[int, int]:
+        """Get the line range corresponding to a character range.
+
+        Args:
+            start_char: Starting character offset (inclusive)
+            end_char: Ending character offset (exclusive)
+
+        Returns:
+            Tuple of (start_line, end_line) where both are 0-indexed
+
+        Raises:
+            ValueError: If start_char or end_char are invalid
+        """
+        if start_char < 0 or end_char < 0:
+            raise ValueError("Character offsets must be non-negative")
+        if start_char >= end_char:
+            raise ValueError("start_char must be less than end_char")
+        if end_char > len(self.text):
+            raise ValueError("end_char exceeds text length")
+
+        # Find the line containing start_char
+        start_line = bisect_right(self.line_offsets, start_char) - 1
+        if start_line < 0:
+            start_line = 0
+
+        # Find the line containing end_char
+        end_line = bisect_right(self.line_offsets, end_char) - 1
+        if end_line < 0:
+            end_line = 0
+
+        return start_line, end_line
+
+    def get_line_number(self, char_offset: int) -> int:
+        """Get the line number containing a character offset.
+
+        Args:
+            char_offset: Character offset to find line for
+
+        Returns:
+            0-indexed line number
+
+        Raises:
+            ValueError: If char_offset is invalid
+        """
+        if char_offset < 0:
+            raise ValueError("Character offset must be non-negative")
+        if char_offset > len(self.text):
+            raise ValueError("Character offset exceeds text length")
+
+        line_number = bisect_right(self.line_offsets, char_offset) - 1
+        return max(0, line_number)
 
 
 def detect_encoding(file_bytes: bytes) -> str:
@@ -213,7 +398,7 @@ def clean_markdown_content(
     file_path: Optional[Path] = None,
     content: Optional[str] = None,
     include_code: bool = False,
-) -> Tuple[str, Dict[str, Any]]:
+) -> CleanedDocument:
     """Clean and normalize Markdown content.
 
     This function performs comprehensive cleaning of Markdown content:
@@ -229,11 +414,15 @@ def clean_markdown_content(
         include_code: Whether to preserve code blocks in output
 
     Returns:
-        Tuple of (cleaned_text, metadata) where metadata contains:
-        - original_line_count: Number of lines in original content
-        - cleaned_line_count: Number of lines in cleaned content
-        - encoding: Detected encoding
-        - processing_info: Additional processing details
+        CleanedDocument object containing:
+        - text: The cleaned text content
+        - path: Path to the original file (if provided)
+        - line_offsets: Character offsets for line starts
+        - metadata: Processing metadata including:
+          - original_line_count: Number of lines in original content
+          - cleaned_line_count: Number of lines in cleaned content
+          - encoding: Detected encoding
+          - processing_info: Additional processing details
 
     Raises:
         ValueError: If neither file_path nor content is provided
@@ -294,12 +483,16 @@ def clean_markdown_content(
         "converted_to_plain_text": True,
     }
 
-    return cleaned_text, metadata
+    # Create and return CleanedDocument
+    return CleanedDocument(
+        text=cleaned_text,
+        path=file_path,
+        line_offsets=[],  # Will be computed in __post_init__
+        metadata=metadata,
+    )
 
 
-def clean_markdown_file(
-    file_path: Path, include_code: bool = False
-) -> Tuple[str, Dict[str, Any]]:
+def clean_markdown_file(file_path: Path, include_code: bool = False) -> CleanedDocument:
     """Convenience function to clean a Markdown file.
 
     Args:
@@ -307,14 +500,12 @@ def clean_markdown_file(
         include_code: Whether to preserve code blocks in output
 
     Returns:
-        Tuple of (cleaned_text, metadata)
+        CleanedDocument object containing cleaned text and metadata
     """
     return clean_markdown_content(file_path=file_path, include_code=include_code)
 
 
-def clean_markdown_string(
-    content: str, include_code: bool = False
-) -> Tuple[str, Dict[str, Any]]:
+def clean_markdown_string(content: str, include_code: bool = False) -> CleanedDocument:
     """Convenience function to clean a Markdown string.
 
     Args:
@@ -322,6 +513,6 @@ def clean_markdown_string(
         include_code: Whether to preserve code blocks in output
 
     Returns:
-        Tuple of (cleaned_text, metadata)
+        CleanedDocument object containing cleaned text and metadata
     """
     return clean_markdown_content(content=content, include_code=include_code)
