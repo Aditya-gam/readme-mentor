@@ -77,17 +77,20 @@ class TestCreatePersistDirectory:
     """Test the _create_persist_directory function."""
 
     @patch("app.embeddings.ingest.Path")
-    def test_create_persist_directory(self, mock_path):
+    def test_create_persist_directory(self, mock_path_class):
         """Test creating persist directory."""
+        # Setup mock
         mock_path_instance = Mock()
-        mock_path.return_value = mock_path_instance
+        mock_path_class.return_value = mock_path_instance
         mock_path_instance.__truediv__ = Mock(return_value=mock_path_instance)
 
         from app.embeddings.ingest import _create_persist_directory
 
+        # Call function
         result = _create_persist_directory("test_repo")
 
-        mock_path.assert_called_once_with("data")
+        # Verify mocks were called correctly
+        mock_path_class.assert_called_once_with("data")
         mock_path_instance.__truediv__.assert_called()
         mock_path_instance.mkdir.assert_called_once_with(parents=True, exist_ok=True)
         assert result == mock_path_instance
@@ -99,13 +102,17 @@ class TestGenerateCollectionName:
     @patch("app.embeddings.ingest.uuid")
     def test_generate_collection_name(self, mock_uuid):
         """Test generating collection name."""
+        # Setup mock to return a specific UUID
         mock_uuid.uuid4.return_value = "12345678-1234-1234-1234-123456789abc"
 
         from app.embeddings.ingest import _generate_collection_name
 
+        # Call function
         result = _generate_collection_name("test_repo")
 
+        # Verify result
         assert result == "test_repo_12345678"
+        mock_uuid.uuid4.assert_called_once()
 
 
 class TestChunkTextWithLineMapping:
@@ -414,40 +421,44 @@ class TestIngestRepository:
         assert result == mock_vectorstore
 
     @patch("app.embeddings.ingest._extract_repo_slug")
-    def test_ingest_repository_no_files_found(self, mock_extract_slug):
+    @patch("app.embeddings.ingest.fetch_repository_files")
+    def test_ingest_repository_no_files_found(
+        self, mock_fetch_files, mock_extract_slug
+    ):
         """Test repository ingestion with no files found."""
         # Setup mocks
         mock_extract_slug.return_value = "test_repo"
+        mock_fetch_files.return_value = []
 
-        with patch("app.embeddings.ingest.fetch_repository_files") as mock_fetch_files:
-            mock_fetch_files.return_value = []
+        # Call function and expect exception
+        from app.embeddings.ingest import ingest_repository
 
-            # Call function and expect exception
-            from app.embeddings.ingest import ingest_repository
-
-            with pytest.raises(Exception, match="No files found in repository"):
-                ingest_repository("https://github.com/test/repo")
+        with pytest.raises(Exception, match="No files found in repository"):
+            ingest_repository("https://github.com/test/repo")
 
     @patch("app.embeddings.ingest._extract_repo_slug")
-    def test_ingest_repository_no_documents_created(self, mock_extract_slug):
+    @patch("app.embeddings.ingest.fetch_repository_files")
+    @patch("app.embeddings.ingest._process_file_for_chunking")
+    @patch("app.embeddings.ingest.Path")
+    def test_ingest_repository_no_documents_created(
+        self, mock_path, mock_process_file, mock_fetch_files, mock_extract_slug
+    ):
         """Test repository ingestion with no documents created."""
         # Setup mocks
         mock_extract_slug.return_value = "test_repo"
+        mock_fetch_files.return_value = ["README.md"]
 
-        with (
-            patch("app.embeddings.ingest.fetch_repository_files") as mock_fetch_files,
-            patch(
-                "app.embeddings.ingest._process_file_for_chunking"
-            ) as mock_process_file,
-        ):
-            mock_fetch_files.return_value = ["file1.md"]
-            mock_process_file.return_value = []
+        mock_path_instance = Mock()
+        mock_path.return_value = mock_path_instance
+        mock_path_instance.exists.return_value = True
 
-            # Call function and expect exception
-            from app.embeddings.ingest import ingest_repository
+        mock_process_file.return_value = []
 
-            with pytest.raises(Exception, match="No documents created from files"):
-                ingest_repository("https://github.com/test/repo")
+        # Call function and expect exception
+        from app.embeddings.ingest import ingest_repository
+
+        with pytest.raises(Exception, match="No documents created from files"):
+            ingest_repository("https://github.com/test/repo")
 
     @patch("app.embeddings.ingest._generate_collection_name")
     @patch("app.embeddings.ingest.Chroma")

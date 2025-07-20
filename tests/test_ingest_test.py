@@ -144,8 +144,7 @@ def test_ingest_repository_metadata_consistency(clean_data_dir, unique_collectio
     # Get all documents from the vector store
     # Note: This is a workaround since Chroma doesn't have a direct method to get all documents
     # We'll use a broad search to get most documents
-    all_results = vectorstore.similarity_search(
-        "", k=100)  # Get up to 100 documents
+    all_results = vectorstore.similarity_search("", k=100)  # Get up to 100 documents
 
     assert len(all_results) > 0, "No documents found in vector store"
 
@@ -182,8 +181,7 @@ def test_ingest_repository_metadata_consistency(clean_data_dir, unique_collectio
 
         # Check file exists
         file_path = Path(metadata["file"])
-        assert file_path.exists(
-        ), f"Referenced file does not exist: {metadata['file']}"
+        assert file_path.exists(), f"Referenced file does not exist: {metadata['file']}"
 
         logger.info(
             f"Document {i}: {metadata['file']} (lines {metadata['start_line']}-{metadata['end_line']})"
@@ -251,8 +249,7 @@ def test_ingest_repository_line_mapping_accuracy(
 
         # Check that the referenced file exists and has enough lines
         file_path = Path(metadata["file"])
-        assert file_path.exists(
-        ), f"Referenced file does not exist: {metadata['file']}"
+        assert file_path.exists(), f"Referenced file does not exist: {metadata['file']}"
 
         # Read the actual file to verify line numbers
         with open(file_path, "r", encoding="utf-8") as f:
