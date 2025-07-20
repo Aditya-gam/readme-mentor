@@ -8,7 +8,7 @@ import re
 from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import chardet
 from bs4 import BeautifulSoup
@@ -465,6 +465,10 @@ def clean_markdown_content(
 
     # Read content from file if file_path provided
     if file_path is not None:
+        # Convert string to Path if needed
+        if isinstance(file_path, str):
+            file_path = Path(file_path)
+
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -516,11 +520,13 @@ def clean_markdown_content(
     )
 
 
-def clean_markdown_file(file_path: Path, include_code: bool = False) -> CleanedDocument:
+def clean_markdown_file(
+    file_path: Union[str, Path], include_code: bool = False
+) -> CleanedDocument:
     """Convenience function to clean a Markdown file.
 
     Args:
-        file_path: Path to the Markdown file to process
+        file_path: Path to the Markdown file to process (string or Path)
         include_code: Whether to preserve code blocks in output
 
     Returns:

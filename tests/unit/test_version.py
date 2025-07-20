@@ -26,8 +26,7 @@ description = "A tool for analyzing README files"
             )
 
             with patch("app.version.Path") as mock_path:
-                mock_path.return_value.parent.parent = Path(
-                    "/mock/project/root")
+                mock_path.return_value.parent.parent = Path("/mock/project/root")
 
                 result = get_version()
                 assert result == "1.2.3"
@@ -44,8 +43,7 @@ description = "A tool for analyzing README files"
     def test_get_version_invalid_toml(self):
         """Test version retrieval with invalid TOML file."""
         with patch("builtins.open") as mock_open:
-            mock_open.side_effect = tomllib.TOMLDecodeError(
-                "Invalid TOML", "", 0)
+            mock_open.side_effect = tomllib.TOMLDecodeError("Invalid TOML", "", 0)
 
             result = get_version()
             assert result == "0.0.0"
@@ -53,7 +51,9 @@ description = "A tool for analyzing README files"
     def test_get_version_missing_version_key(self):
         """Test version retrieval when version key is missing from TOML."""
         with patch("builtins.open") as mock_open:
-            mock_open.return_value.__enter__.return_value.read.return_value = b"[project]\nname = 'test'"
+            mock_open.return_value.__enter__.return_value.read.return_value = (
+                b"[project]\nname = 'test'"
+            )
 
             with patch("app.version.tomllib.load") as mock_load:
                 mock_load.side_effect = KeyError("version")
@@ -64,7 +64,9 @@ description = "A tool for analyzing README files"
     def test_get_version_missing_project_section(self):
         """Test version retrieval when project section is missing."""
         with patch("builtins.open") as mock_open:
-            mock_open.return_value.__enter__.return_value.read.return_value = b"[tool.poetry]\nname = 'test'"
+            mock_open.return_value.__enter__.return_value.read.return_value = (
+                b"[tool.poetry]\nname = 'test'"
+            )
 
             with patch("app.version.tomllib.load") as mock_load:
                 mock_load.side_effect = KeyError("project")
