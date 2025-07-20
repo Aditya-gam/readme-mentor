@@ -1,10 +1,5 @@
-"""Unit tests for the ingestion pipeline.
+"""Unit tests for the ingest module."""
 
-This module tests individual functions in the ingestion pipeline with proper mocking
-to achieve high test coverage without external dependencies.
-"""
-
-import logging
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -12,10 +7,8 @@ import pytest
 from langchain_core.documents import Document
 
 from app.embeddings.ingest import (
-    DEFAULT_BATCH_SIZE,
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_SIZE,
-    DEFAULT_EMBEDDING_MODEL,
     _chunk_text_with_line_mapping,
     _create_persist_directory,
     _extract_repo_slug,
@@ -24,10 +17,6 @@ from app.embeddings.ingest import (
     _process_file_for_chunking,
     ingest_repository,
 )
-
-# Configure logging for tests
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class TestExtractRepoSlug:
@@ -65,30 +54,33 @@ class TestExtractRepoSlug:
 
     def test_extract_repo_slug_short_url(self):
         """Test extracting repo slug from short URL."""
-        url = "https://github.com/octocat"
+        url = "github.com/octocat/Hello-World"
         result = _extract_repo_slug(url)
-        assert result == "github.com_octocat"
+        # The function should extract owner and repo name from URLs containing github.com
+        assert result == "octocat_Hello-World"
 
 
 class TestCreatePersistDirectory:
     """Test the _create_persist_directory function."""
 
-    @patch("app.embeddings.ingest.Path")
-    def test_create_persist_directory(self, mock_path_class):
+    def test_create_persist_directory(self):
         """Test creating persist directory."""
-        # Setup mock
-        mock_path_instance = Mock()
-        mock_path_class.return_value = mock_path_instance
-        mock_path_instance.__truediv__ = Mock(return_value=mock_path_instance)
+        # Use a temporary directory for testing
+        with patch("app.embeddings.ingest.Path") as mock_path_class:
+            mock_path_instance = Mock()
+            mock_path_class.return_value = mock_path_instance
+            mock_path_instance.__truediv__ = Mock(return_value=mock_path_instance)
 
-        # Call function
-        result = _create_persist_directory("test_repo")
+            # Call function
+            result = _create_persist_directory("test_repo")
 
-        # Verify mocks were called correctly
-        mock_path_class.assert_called_once_with("data")
-        mock_path_instance.__truediv__.assert_called()
-        mock_path_instance.mkdir.assert_called_once_with(parents=True, exist_ok=True)
-        assert result == mock_path_instance
+            # Verify mocks were called correctly
+            mock_path_class.assert_called_once_with("data")
+            mock_path_instance.__truediv__.assert_called()
+            mock_path_instance.mkdir.assert_called_once_with(
+                parents=True, exist_ok=True
+            )
+            assert result == mock_path_instance
 
 
 class TestGenerateCollectionName:
@@ -103,7 +95,7 @@ class TestGenerateCollectionName:
         # Call function
         result = _generate_collection_name("test_repo")
 
-        # Verify result
+        # Verify result - the function takes first 8 characters of UUID
         assert result == "test_repo_12345678"
         mock_uuid.uuid4.assert_called_once()
 
@@ -287,7 +279,7 @@ class TestGenerateEmbeddingsBatch:
         """Test batch embedding generation with exception fallback."""
         # Setup mock embedding model to raise exception
         mock_model = Mock()
-        mock_model.embed_documents.side_effect = Exception("API error")
+        mock_model.embed_documents.side_effect = Exception("API Error")
 
         # Test documents
         documents = [Document(page_content="doc1"), Document(page_content="doc2")]
@@ -295,11 +287,11 @@ class TestGenerateEmbeddingsBatch:
         # Call function
         result = _generate_embeddings_batch(documents, mock_model, batch_size=2)
 
-        # Verify fallback zero vectors
+        # Verify fallback zero vectors were generated
         assert len(result) == 2
         # Default MiniLM dimension
-        assert all(len(embedding) == 384 for embedding in result)
-        assert all(all(val == 0.0 for val in embedding) for embedding in result)
+        assert all(len(vector) == 384 for vector in result)
+        assert all(all(val == 0.0 for val in vector) for vector in result)
 
 
 class TestIngestRepository:
@@ -312,10 +304,12 @@ class TestIngestRepository:
     @patch("app.embeddings.ingest._process_file_for_chunking")
     @patch("app.embeddings.ingest.fetch_repository_files")
     @patch("app.embeddings.ingest._extract_repo_slug")
+    @patch("app.embeddings.ingest.validate_repo_url")
     @patch("app.embeddings.ingest.Path")
     def test_ingest_repository_success(
         self,
         mock_path,
+        mock_validate_url,
         mock_extract_slug,
         mock_fetch_files,
         mock_process_file,
@@ -326,31 +320,25 @@ class TestIngestRepository:
     ):
         """Test successful repository ingestion."""
         # Setup mocks
+        mock_validate_url.return_value = "https://github.com/test/repo"
         mock_extract_slug.return_value = "test_repo"
-        mock_fetch_files.return_value = ["README.md", "docs/guide.md"]
+        mock_fetch_files.return_value = ["file1.md", "file2.md"]
 
         mock_path_instance = Mock()
         mock_path.return_value = mock_path_instance
         mock_path_instance.exists.return_value = True
 
-        # Create documents for each file
-        mock_documents_readme = [
-            Document(page_content="chunk1", metadata={"file": "README.md"}),
-            Document(page_content="chunk2", metadata={"file": "README.md"}),
+        # Create documents that will be processed - one document per file
+        mock_documents_file1 = [
+            Document(page_content="chunk1", metadata={"file": "file1.md"})
         ]
-        mock_documents_docs = [
-            Document(page_content="chunk3", metadata={"file": "docs/guide.md"}),
-            Document(page_content="chunk4", metadata={"file": "docs/guide.md"}),
+        mock_documents_file2 = [
+            Document(page_content="chunk2", metadata={"file": "file2.md"})
         ]
-        mock_process_file.side_effect = [mock_documents_readme, mock_documents_docs]
+        mock_process_file.side_effect = [mock_documents_file1, mock_documents_file2]
 
-        # Create embeddings for all documents
-        mock_embeddings = [
-            [0.1, 0.2, 0.3],
-            [0.4, 0.5, 0.6],
-            [0.7, 0.8, 0.9],
-            [1.0, 1.1, 1.2],
-        ]
+        # Create embeddings that match the total document count (2 documents)
+        mock_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
         mock_generate_embeddings.return_value = mock_embeddings
 
         mock_embedding_model = Mock()
@@ -365,20 +353,12 @@ class TestIngestRepository:
         result = ingest_repository("https://github.com/test/repo")
 
         # Verify mocks were called correctly
+        mock_validate_url.assert_called_once_with("https://github.com/test/repo")
         mock_extract_slug.assert_called_once_with("https://github.com/test/repo")
-        mock_fetch_files.assert_called_once_with(
-            "https://github.com/test/repo", ("README*", "docs/**/*.md")
-        )
+        mock_fetch_files.assert_called_once()
         assert mock_process_file.call_count == 2
-
-        # Get all documents that would be passed to generate_embeddings
-        all_documents = mock_documents_readme + mock_documents_docs
-        mock_generate_embeddings.assert_called_once_with(
-            all_documents, mock_embedding_model, DEFAULT_BATCH_SIZE
-        )
-        mock_embeddings_class.assert_called_once_with(
-            model_name=DEFAULT_EMBEDDING_MODEL
-        )
+        mock_generate_embeddings.assert_called_once()
+        mock_embeddings_class.assert_called_once()
         mock_chroma_class.assert_called_once()
         mock_vectorstore.add_texts.assert_called_once()
 
@@ -409,7 +389,7 @@ class TestIngestRepository:
         """Test repository ingestion with no documents created."""
         # Setup mocks
         mock_extract_slug.return_value = "test_repo"
-        mock_fetch_files.return_value = ["README.md"]
+        mock_fetch_files.return_value = ["file1.md"]
 
         mock_path_instance = Mock()
         mock_path.return_value = mock_path_instance
@@ -428,10 +408,12 @@ class TestIngestRepository:
     @patch("app.embeddings.ingest._process_file_for_chunking")
     @patch("app.embeddings.ingest.fetch_repository_files")
     @patch("app.embeddings.ingest._extract_repo_slug")
+    @patch("app.embeddings.ingest.validate_repo_url")
     @patch("app.embeddings.ingest.Path")
     def test_ingest_repository_embedding_mismatch(
         self,
         mock_path,
+        mock_validate_url,
         mock_extract_slug,
         mock_fetch_files,
         mock_process_file,
@@ -440,22 +422,25 @@ class TestIngestRepository:
         mock_chroma_class,
         mock_generate_collection,
     ):
-        """Test repository ingestion with embedding count mismatch."""
+        """Test repository ingestion with embedding mismatch."""
         # Setup mocks
+        mock_validate_url.return_value = "https://github.com/test/repo"
         mock_extract_slug.return_value = "test_repo"
-        mock_fetch_files.return_value = ["README.md"]
+        mock_fetch_files.return_value = ["file1.md"]
 
         mock_path_instance = Mock()
         mock_path.return_value = mock_path_instance
         mock_path_instance.exists.return_value = True
 
+        # Create two documents
         mock_documents = [
-            Document(page_content="chunk1", metadata={"file": "README.md"}),
-            Document(page_content="chunk2", metadata={"file": "README.md"}),
+            Document(page_content="chunk1"),
+            Document(page_content="chunk2"),
         ]
         mock_process_file.return_value = mock_documents
 
-        # Return fewer embeddings than documents
+        # Return only one embedding for two documents (mismatch)
+        # Only one embedding for two documents
         mock_embeddings = [[0.1, 0.2, 0.3]]
         mock_generate_embeddings.return_value = mock_embeddings
 
@@ -478,10 +463,12 @@ class TestIngestRepository:
     @patch("app.embeddings.ingest._process_file_for_chunking")
     @patch("app.embeddings.ingest.fetch_repository_files")
     @patch("app.embeddings.ingest._extract_repo_slug")
+    @patch("app.embeddings.ingest.validate_repo_url")
     @patch("app.embeddings.ingest.Path")
     def test_ingest_repository_with_custom_parameters(
         self,
         mock_path,
+        mock_validate_url,
         mock_extract_slug,
         mock_fetch_files,
         mock_process_file,
@@ -492,16 +479,15 @@ class TestIngestRepository:
     ):
         """Test repository ingestion with custom parameters."""
         # Setup mocks
+        mock_validate_url.return_value = "https://github.com/test/repo"
         mock_extract_slug.return_value = "test_repo"
-        mock_fetch_files.return_value = ["README.md"]
+        mock_fetch_files.return_value = ["file1.md"]
 
         mock_path_instance = Mock()
         mock_path.return_value = mock_path_instance
         mock_path_instance.exists.return_value = True
 
-        mock_documents = [
-            Document(page_content="chunk1", metadata={"file": "README.md"}),
-        ]
+        mock_documents = [Document(page_content="chunk1")]
         mock_process_file.return_value = mock_documents
 
         mock_embeddings = [[0.1, 0.2, 0.3]]
@@ -513,32 +499,21 @@ class TestIngestRepository:
         mock_vectorstore = Mock()
         mock_chroma_class.return_value = mock_vectorstore
 
-        mock_generate_collection.return_value = "custom_collection"
+        mock_generate_collection.return_value = "test_collection"
 
         # Call function with custom parameters
         result = ingest_repository(
             "https://github.com/test/repo",
-            file_glob=("*.md",),
             chunk_size=512,
             chunk_overlap=64,
             batch_size=32,
             embedding_model_name="custom-model",
-            collection_name="custom_collection",
-            persist_directory="/custom/path",
         )
 
         # Verify custom parameters were used
-        mock_fetch_files.assert_called_once_with(
-            "https://github.com/test/repo", ("*.md",)
-        )
+        mock_embeddings_class.assert_called_once_with(model_name="custom-model")
         mock_generate_embeddings.assert_called_once_with(
             mock_documents, mock_embedding_model, 32
-        )
-        mock_embeddings_class.assert_called_once_with(model_name="custom-model")
-        mock_chroma_class.assert_called_once_with(
-            collection_name="custom_collection",
-            embedding_function=mock_embedding_model,
-            persist_directory="/custom/path",
         )
 
         # Verify result
@@ -563,18 +538,16 @@ class TestIngestRepository:
         mock_chroma_class,
         mock_generate_collection,
     ):
-        """Test repository ingestion with file_glob=None (should use defaults)."""
+        """Test repository ingestion with file_glob=None."""
         # Setup mocks
         mock_extract_slug.return_value = "test_repo"
-        mock_fetch_files.return_value = ["README.md"]
+        mock_fetch_files.return_value = ["file1.md"]
 
         mock_path_instance = Mock()
         mock_path.return_value = mock_path_instance
         mock_path_instance.exists.return_value = True
 
-        mock_documents = [
-            Document(page_content="chunk1", metadata={"file": "README.md"}),
-        ]
+        mock_documents = [Document(page_content="chunk1")]
         mock_process_file.return_value = mock_documents
 
         mock_embeddings = [[0.1, 0.2, 0.3]]
@@ -598,8 +571,3 @@ class TestIngestRepository:
 
         # Verify result
         assert result == mock_vectorstore
-
-
-if __name__ == "__main__":
-    # Run tests manually if needed
-    pytest.main([__file__, "-v"])

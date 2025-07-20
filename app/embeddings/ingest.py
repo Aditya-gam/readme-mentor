@@ -16,6 +16,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 from ..github.loader import fetch_repository_files
 from ..preprocess.markdown_cleaner import LineOffsetMapper, clean_markdown_file
+from ..utils.validators import InvalidRepoURLError, validate_repo_url
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -217,10 +218,11 @@ def ingest_repository(
     """Ingest a repository for vector search.
 
     This function performs the complete ingestion pipeline:
-    1. Fetches repository files
-    2. Cleans and chunks the content
-    3. Generates embeddings
-    4. Stores in ChromaDB vector store
+    1. Validates the repository URL
+    2. Fetches repository files
+    3. Cleans and chunks the content
+    4. Generates embeddings
+    5. Stores in ChromaDB vector store
 
     Args:
         repo_url: GitHub repository URL
@@ -229,17 +231,28 @@ def ingest_repository(
         chunk_overlap: Overlap between chunks in characters
         batch_size: Number of documents to process in embedding batches
         embedding_model_name: Name of the sentence-transformers model to use
+        collection_name: Custom collection name for ChromaDB
+        persist_directory: Directory to persist ChromaDB data
 
     Returns:
         ChromaDB vector store instance
 
     Raises:
+        InvalidRepoURLError: If the repository URL is invalid
         Exception: If ingestion fails
     """
     logger.info(f"Starting ingestion for repository: {repo_url}")
 
+    # Validate repository URL
+    try:
+        validated_url = validate_repo_url(repo_url)
+        logger.info(f"Repository URL validated: {validated_url}")
+    except (ValueError, InvalidRepoURLError) as e:
+        logger.error(f"Invalid repository URL: {e}")
+        raise
+
     # Extract repository slug
-    repo_slug = _extract_repo_slug(repo_url)
+    repo_slug = _extract_repo_slug(validated_url)
     logger.info(f"Repository slug: {repo_slug}")
 
     # Set default file patterns if not provided
@@ -248,7 +261,7 @@ def ingest_repository(
 
     # Fetch repository files
     logger.info("Fetching repository files...")
-    file_paths = fetch_repository_files(repo_url, file_glob)
+    file_paths = fetch_repository_files(validated_url, file_glob)
 
     if not file_paths:
         logger.warning("No files found in repository")
