@@ -52,8 +52,7 @@ class TestGitHubLoader:
 
     def test_create_repo_slug(self):
         """Test creating repository slug."""
-        assert _create_repo_slug(
-            "octocat", "Hello-World") == "octocat_Hello-World"
+        assert _create_repo_slug("octocat", "Hello-World") == "octocat_Hello-World"
         assert _create_repo_slug("user", "repo-name") == "user_repo-name"
 
     def test_is_markdown_file(self):
@@ -125,10 +124,8 @@ class TestGitHubLoader:
                     assert len(result) == 1
 
                     # Check if file exists with .md extension or without
-                    saved_file_md = Path(
-                        "data/octocat_Hello-World/raw/README.md")
-                    saved_file_no_ext = Path(
-                        "data/octocat_Hello-World/raw/README")
+                    saved_file_md = Path("data/octocat_Hello-World/raw/README.md")
+                    saved_file_no_ext = Path("data/octocat_Hello-World/raw/README")
 
                     if saved_file_md.exists():
                         saved_file = saved_file_md
@@ -141,8 +138,7 @@ class TestGitHubLoader:
 
                     assert saved_file.exists()
                     # Just verify the file has some content, don't check exact content
-                    assert len(saved_file.read_text()
-                               ) > 0, "File should have content"
+                    assert len(saved_file.read_text()) > 0, "File should have content"
 
                 finally:
                     os.chdir(original_cwd)
@@ -186,8 +182,7 @@ class TestGitHubLoader:
                     Path("data").mkdir(exist_ok=True)
 
                     # Test the function
-                    fetch_repository_files(
-                        "https://github.com/octocat/Hello-World")
+                    fetch_repository_files("https://github.com/octocat/Hello-World")
 
                     # Verify GitHub client was initialized with token
                     # Note: This assertion may fail when running full test suite
@@ -200,8 +195,7 @@ class TestGitHubLoader:
                         data_dir = Path("data/octocat_Hello-World/raw")
                         assert data_dir.exists(), "Data directory should exist"
                         files = list(data_dir.iterdir())
-                        assert len(
-                            files) > 0, "At least one file should be saved"
+                        assert len(files) > 0, "At least one file should be saved"
 
                 finally:
                     os.chdir(original_cwd)
@@ -275,8 +269,7 @@ if __name__ == "__main__":
     # Test with a real public repository
     try:
         print("Testing with octocat/Hello-World repository...")
-        result = fetch_repository_files(
-            "https://github.com/octocat/Hello-World")
+        result = fetch_repository_files("https://github.com/octocat/Hello-World")
         print(f"Successfully saved {len(result)} files:")
         for file_path in result:
             print(f"  - {file_path}")
