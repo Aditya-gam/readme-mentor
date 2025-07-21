@@ -394,9 +394,9 @@ class TestChainAssembly:
         assert "source_documents" in result
         assert len(result["source_documents"]) <= 2
 
-        # Verify the response contains document markers
-        assert "<doc_0>" in result["answer"]
-        assert "<doc_1>" in result["answer"]
+        # Verify the response contains citations (document markers are replaced with citations)
+        assert "[" in result["answer"] and "]" in result["answer"]
+        assert "L" in result["answer"]  # Line numbers should be present
 
     def test_chain_with_different_parameters(self):
         """

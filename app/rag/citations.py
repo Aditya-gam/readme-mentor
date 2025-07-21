@@ -58,9 +58,10 @@ def _build_citations(
             doc = source_docs[doc_idx]
             metadata = doc.metadata
 
-            file_name = metadata.get("file")
-            start_line = metadata.get("start_line")
-            end_line = metadata.get("end_line")
+            # Try both field naming conventions
+            file_name = metadata.get("file") or metadata.get("source")
+            start_line = metadata.get("start_line") or metadata.get("line_start")
+            end_line = metadata.get("end_line") or metadata.get("line_end")
 
             if _validate_metadata_fields(file_name, start_line, end_line):
                 try:

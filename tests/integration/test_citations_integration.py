@@ -55,8 +55,7 @@ class TestCitationsIntegration:
         source_docs = [
             Document(
                 page_content="dependencies = ['fastapi', 'uvicorn']",
-                metadata={"file": "pyproject.toml",
-                          "start_line": 10, "end_line": 12},
+                metadata={"file": "pyproject.toml", "start_line": 10, "end_line": 12},
             ),
             Document(
                 page_content="[tool.ruff]\nline-length = 88",
@@ -85,8 +84,7 @@ class TestCitationsIntegration:
         source_docs = [
             Document(
                 page_content="This project uses Poetry for dependency management.",
-                metadata={"file": "pyproject.toml",
-                          "start_line": 1, "end_line": 5},
+                metadata={"file": "pyproject.toml", "start_line": 1, "end_line": 5},
             ),
             Document(
                 page_content="The project follows PEP 8 style guidelines.",

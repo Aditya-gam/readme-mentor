@@ -76,8 +76,11 @@ class CustomStuffDocumentsChain(StuffDocumentsChain):
         Returns:
             Dictionary containing the processed answer
         """
-        # Get the raw answer from the underlying LLMChain
-        raw_answer = self.llm_chain.predict(**inputs)
+        # Call the parent method to get the raw answer
+        result = super()._call(inputs)
+
+        # Get the raw answer from the result
+        raw_answer = result[self.output_key]
 
         # Post-process the answer with citations
         processed_answer = render_citations(raw_answer, self._source_docs)
@@ -199,8 +202,11 @@ def get_qa_chain(
         document_variable_name="context",  # Must match the placeholder in qa_llm_prompt
     )
 
+    # Ensure the custom chain has the correct prompt template
+    combine_docs_chain.llm_chain.prompt = qa_llm_prompt
+
     # Assemble the ConversationalRetrievalChain
-    # We use the default 'stuff' chain type and customize it after creation
+    # We use the from_llm method with combine_docs_chain_kwargs to ensure proper configuration
     qa_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,  # LLM for question generation and final answer
         retriever=retriever,
