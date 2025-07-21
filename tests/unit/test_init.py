@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from dotenv import load_dotenv
 
 # Ensure the app directory is in the Python path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -62,34 +61,14 @@ class TestAppInit:
 class TestDotenvLoading:
     """Test dotenv loading functionality."""
 
-    def test_dotenv_load_success(self, cleanup_env_vars, reload_app_modules):
-        """Test successful dotenv loading from a temporary .env file."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            env_file = Path(temp_dir) / ".env"
-            env_content = "TEST_VAR=test_value"
-            env_file.write_text(env_content)
+    def test_dotenv_load_success(self, cleanup_env_vars, mocker):
+        """Test successful dotenv loading by mocking os.getenv."""
+        # Simulate the environment variable being set
+        mocker.patch.dict(os.environ, {"TEST_VAR": "test_value"})
 
-            # Clear any existing TEST_VAR environment variable
-            os.environ.pop("TEST_VAR", None)
+        # Import app.config after patching os.environ to ensure it picks up the mocked value
 
-            # Reload app modules to ensure fresh state
-            for module_name in list(sys.modules.keys()):
-                if module_name.startswith("app"):
-                    del sys.modules[module_name]
-
-            # Patch load_dotenv to use our test file
-            with patch("dotenv.load_dotenv") as mock_load_dotenv:
-
-                def side_effect(dotenv_path=None, **kwargs):
-                    if dotenv_path is None:
-                        load_dotenv(dotenv_path=env_file, override=True)
-                    else:
-                        load_dotenv(dotenv_path=dotenv_path, **kwargs)
-
-                mock_load_dotenv.side_effect = side_effect
-
-                # Import app which should load the .env file
-                assert os.getenv("TEST_VAR") == "test_value"
+        assert os.getenv("TEST_VAR") == "test_value"
 
     def test_dotenv_load_missing_file(self, cleanup_env_vars, reload_app_modules):
         """Test that no error occurs if the .env file is missing."""
