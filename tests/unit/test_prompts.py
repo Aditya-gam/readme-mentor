@@ -7,7 +7,7 @@ from app.prompts import PROMPTS_DIR, get_prompts, load_system_prompt, load_user_
 EXPECTED_SYSTEM_PROMPT_CONTENT = "You are an assistant for a GitHub repository Q&A. Provide brief, factual answers with sources cited inline in the format `[filename L[start]-L[end]]`. Do not deviate from the repository content."
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def setup_prompts_dir(tmp_path):
     """
     Sets up a temporary prompts directory for testing.
@@ -32,7 +32,7 @@ def setup_prompts_dir(tmp_path):
     app.prompts.PROMPTS_DIR = original_prompts_dir
 
 
-def test_load_system_prompt():
+def test_load_system_prompt(setup_prompts_dir):
     """
     Tests that load_system_prompt correctly loads the system prompt.
     """
@@ -41,7 +41,7 @@ def test_load_system_prompt():
     assert system_prompt.template == EXPECTED_SYSTEM_PROMPT_CONTENT
 
 
-def test_load_user_prompt():
+def test_load_user_prompt(setup_prompts_dir):
     """
     Tests that load_user_prompt correctly loads the user prompt (empty).
     """
@@ -50,7 +50,7 @@ def test_load_user_prompt():
     assert user_prompt.template == ""
 
 
-def test_get_prompts():
+def test_get_prompts(setup_prompts_dir):
     """
     Tests that get_prompts returns a dictionary with both prompts.
     """

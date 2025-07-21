@@ -1,7 +1,9 @@
 """Test configuration and fixtures."""
 
+import importlib
 import os
 import shutil
+import sys
 import tempfile
 import uuid
 from pathlib import Path
@@ -56,8 +58,28 @@ def reset_mocks():
     """Reset all mocks between tests to ensure isolation."""
     # This fixture runs automatically for every test
     # It ensures that mocks from previous tests don't interfere
+
+    # Store original modules that might be affected
+    _ = {}
+
     yield
-    # The cleanup happens automatically when the test ends
+
+    # Clean up mocks and reload modules that might have been affected
+    modules_to_reload = [
+        "app.rag.chain",
+        "app.prompts",
+        "app.config",
+        "app.github.loader",
+        "app.embeddings.ingest",
+    ]
+
+    for module_name in modules_to_reload:
+        if module_name in sys.modules:
+            try:
+                importlib.reload(sys.modules[module_name])
+            except (ImportError, AttributeError):
+                # Module might not exist or might not be reloadable
+                pass
 
 
 @pytest.fixture(scope="function")

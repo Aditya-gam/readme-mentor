@@ -71,6 +71,8 @@ addopts = [
     "--strict-config",
     "--verbose",
     "--tb=short",
+    "-W",
+    "ignore::langchain_core._api.deprecation.LangChainDeprecationWarning",
 ]
 cache_dir = "cache/.pytest_cache"
 
