@@ -30,6 +30,81 @@ DEFAULT_BATCH_SIZE = 64
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
+def get_embedding_model(
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
+) -> HuggingFaceEmbeddings:
+    """
+    Get a HuggingFace embedding model instance.
+
+    Args:
+        model_name: Name of the sentence-transformers model to use
+
+    Returns:
+        HuggingFaceEmbeddings instance
+
+    Raises:
+        Exception: If the embedding model cannot be loaded
+    """
+    try:
+        logger.info(f"Initializing embedding model: {model_name}")
+        return HuggingFaceEmbeddings(model_name=model_name)
+    except Exception as e:
+        logger.error(f"Failed to load embedding model {model_name}: {e}")
+        raise Exception(f"Failed to load embedding model: {e}") from e
+
+
+def get_vector_store(
+    repo_id: str, embedding_model: Optional[HuggingFaceEmbeddings] = None
+) -> Chroma:
+    """
+    Load or create a Chroma vector store for the given repository ID.
+
+    Args:
+        repo_id: Repository identifier (e.g., 'owner_repo')
+        embedding_model: HuggingFace embedding model instance (optional)
+
+    Returns:
+        Chroma vector store instance
+
+    Raises:
+        ValueError: If the vector store cannot be found or loaded
+        Exception: If there are issues with the embedding model
+    """
+    # Construct the path to the vector store
+    vector_store_path = Path("data") / repo_id / "chroma"
+
+    if not vector_store_path.exists():
+        raise ValueError(f"Vector store not found for repository ID: {repo_id}")
+
+    # Get embedding model if not provided
+    if embedding_model is None:
+        embedding_model = get_embedding_model()
+
+    try:
+        logger.info(f"Loading vector store from: {vector_store_path}")
+        vector_store = Chroma(
+            persist_directory=str(vector_store_path), embedding_function=embedding_model
+        )
+
+        # Verify the vector store has documents
+        # Try a simple search to check if the store is working
+        try:
+            test_results = vector_store.similarity_search("test", k=1)
+            logger.info(
+                f"Vector store loaded successfully with {len(test_results)} test results"
+            )
+        except Exception as e:
+            logger.warning(f"Vector store loaded but test search failed: {e}")
+
+        return vector_store
+
+    except Exception as e:
+        logger.error(f"Failed to load vector store from {vector_store_path}: {e}")
+        raise ValueError(
+            f"Failed to load vector store for repository {repo_id}: {e}"
+        ) from e
+
+
 def _extract_repo_slug(repo_url: str) -> str:
     """Extract repository slug from GitHub URL.
 

@@ -71,6 +71,7 @@ def reset_mocks():
         "app.config",
         "app.github.loader",
         "app.embeddings.ingest",
+        "app.backend",
     ]
 
     for module_name in modules_to_reload:
