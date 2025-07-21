@@ -143,7 +143,7 @@ def generate_answer(
 
     except Exception as e:
         logger.error(f"Unexpected error during answer generation: {e}")
-        raise Exception(f"Failed to generate answer: {e}") from e
+        raise RuntimeError(f"Failed to generate answer: {e}") from e
 
 
 def _extract_citation_metadata(

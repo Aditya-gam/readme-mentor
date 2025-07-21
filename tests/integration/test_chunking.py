@@ -124,7 +124,7 @@ class TestProcessFileForChunking:
 
         # Verify mocks were called
         mock_clean.assert_called_once_with(file_path, include_code=False)
-        mock_chunk.assert_called_once_with("cleaned content", file_path)
+        mock_chunk.assert_called_once_with("cleaned content", file_path, 1024, 128)
 
         # Verify result
         assert result == mock_documents

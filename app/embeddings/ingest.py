@@ -16,7 +16,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 from ..github.loader import fetch_repository_files
 from ..preprocess.markdown_cleaner import LineOffsetMapper, clean_markdown_file
-from ..utils.validators import InvalidRepoURLError, validate_repo_url
+from ..utils.validators import validate_repo_url
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ def get_embedding_model(
         return HuggingFaceEmbeddings(model_name=model_name)
     except Exception as e:
         logger.error(f"Failed to load embedding model {model_name}: {e}")
-        raise Exception(f"Failed to load embedding model: {e}") from e
+        raise RuntimeError(f"Failed to load embedding model: {e}") from e
 
 
 def get_vector_store(
@@ -161,6 +161,50 @@ def _generate_collection_name(repo_slug: str) -> str:
     return f"{repo_slug}_{unique_id}"
 
 
+def _find_chunk_position(text: str, chunk: str, current_pos: int) -> int:
+    """Find the position of a chunk in the original text.
+
+    Args:
+        text: Original text content
+        chunk: Chunk to find
+        current_pos: Current position to start search from
+
+    Returns:
+        Position of the chunk in the text
+    """
+    chunk_start = text.find(chunk, current_pos)
+    if chunk_start == -1:
+        # Fallback: try to find the chunk anywhere in the text
+        for i in range(len(text) - len(chunk) + 1):
+            if text[i : i + len(chunk)] == chunk:
+                chunk_start = i
+                break
+        if chunk_start == -1:
+            chunk_start = current_pos
+    return chunk_start
+
+
+def _get_chunk_line_range(
+    line_mapper: LineOffsetMapper, chunk_start: int, chunk_end: int, text: str
+) -> tuple[int, int]:
+    """Get the line range for a chunk.
+
+    Args:
+        line_mapper: Line offset mapper
+        chunk_start: Start position of chunk
+        chunk_end: End position of chunk
+        text: Original text content
+
+    Returns:
+        Tuple of (start_line, end_line)
+    """
+    try:
+        return line_mapper.get_line_range(chunk_start, chunk_end)
+    except ValueError:
+        # Fallback: use the entire text range
+        return 0, len(text.split("\n")) - 1
+
+
 def _chunk_text_with_line_mapping(
     text: str,
     file_path: Path,
@@ -198,17 +242,7 @@ def _chunk_text_with_line_mapping(
 
     for chunk in chunks:
         # Find the character range for this chunk in the original text
-        chunk_start = text.find(chunk, current_pos)
-        if chunk_start == -1:
-            # Fallback: use current position and try to find the chunk
-            # This can happen with overlap or when the splitter modifies the text
-            chunk_start = current_pos
-            # Try to find a substring that matches as much as possible
-            for i in range(len(text) - len(chunk) + 1):
-                if text[i : i + len(chunk)] == chunk:
-                    chunk_start = i
-                    break
-
+        chunk_start = _find_chunk_position(text, chunk, current_pos)
         chunk_end = min(chunk_start + len(chunk), len(text))
         current_pos = chunk_end
 
@@ -219,11 +253,9 @@ def _chunk_text_with_line_mapping(
             chunk_end = len(text)
 
         # Get line range for this chunk
-        try:
-            start_line, end_line = line_mapper.get_line_range(chunk_start, chunk_end)
-        except ValueError:
-            # Fallback: use the entire text range
-            start_line, end_line = 0, len(text.split("\n")) - 1
+        start_line, end_line = _get_chunk_line_range(
+            line_mapper, chunk_start, chunk_end, text
+        )
 
         # Create metadata
         metadata = {
@@ -241,11 +273,17 @@ def _chunk_text_with_line_mapping(
     return documents
 
 
-def _process_file_for_chunking(file_path: Path) -> List[Document]:
+def _process_file_for_chunking(
+    file_path: Path,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+) -> List[Document]:
     """Process a single file for chunking.
 
     Args:
         file_path: Path to the file to process
+        chunk_size: Size of each chunk in characters
+        chunk_overlap: Overlap between chunks in characters
 
     Returns:
         List of Document objects with chunks
@@ -257,7 +295,9 @@ def _process_file_for_chunking(file_path: Path) -> List[Document]:
         cleaned_doc = clean_markdown_file(file_path, include_code=False)
 
         # Chunk the cleaned text
-        documents = _chunk_text_with_line_mapping(cleaned_doc.text, file_path)
+        documents = _chunk_text_with_line_mapping(
+            cleaned_doc.text, file_path, chunk_size, chunk_overlap
+        )
 
         logger.info(f"Created {len(documents)} chunks from {file_path}")
         return documents
@@ -346,7 +386,7 @@ def ingest_repository(
     try:
         validated_url = validate_repo_url(repo_url)
         logger.info(f"Repository URL validated: {validated_url}")
-    except (ValueError, InvalidRepoURLError) as e:
+    except ValueError as e:
         logger.error(f"Invalid repository URL: {e}")
         raise
 
@@ -364,7 +404,7 @@ def ingest_repository(
 
     if not file_paths:
         logger.warning("No files found in repository")
-        raise Exception("No files found in repository")
+        raise ValueError("No files found in repository")
 
     logger.info(f"Found {len(file_paths)} files to process")
 
@@ -373,12 +413,12 @@ def ingest_repository(
     for file_path_str in file_paths:
         file_path = Path(file_path_str)
         if file_path.exists():
-            documents = _process_file_for_chunking(file_path)
+            documents = _process_file_for_chunking(file_path, chunk_size, chunk_overlap)
             all_documents.extend(documents)
 
     if not all_documents:
         logger.warning("No documents created from files")
-        raise Exception("No documents created from files")
+        raise ValueError("No documents created from files")
 
     logger.info(f"Created {len(all_documents)} total chunks")
 
@@ -394,7 +434,7 @@ def ingest_repository(
         logger.error(
             f"Embedding count mismatch: {len(embeddings)} vs {len(all_documents)}"
         )
-        raise Exception("Embedding generation failed")
+        raise RuntimeError("Embedding generation failed")
 
     logger.info(f"Generated embeddings for {len(embeddings)} chunks")
 
