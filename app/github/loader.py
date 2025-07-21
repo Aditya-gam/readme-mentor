@@ -9,7 +9,7 @@ import httpx
 from github import Auth, Github
 from github.Repository import Repository
 
-from ..config import settings
+from ..config import get_settings
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -366,7 +366,7 @@ def fetch_repository_files(
     logger.info(f"Fetching files from repository: {owner}/{repo_name}")
 
     # Initialize GitHub client
-    github_token = settings.GITHUB_TOKEN
+    github_token = get_settings().GITHUB_TOKEN
     if github_token:
         github_client = Github(auth=Auth.Token(github_token))
         logger.info("Using GitHub token for API access")

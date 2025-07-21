@@ -17,11 +17,15 @@ class TestFileFetching:
     """Test file fetching and processing functionality."""
 
     @patch("app.github.loader.Github")
-    @patch("app.github.loader.settings")
-    def test_fetch_repository_files_smoke_test(self, mock_settings, mock_github_class):
+    @patch("app.github.loader.get_settings")
+    def test_fetch_repository_files_smoke_test(
+        self, mock_get_settings, mock_github_class
+    ):
         """Smoke test for fetching repository files."""
         # Mock settings
+        mock_settings = Mock()
         mock_settings.GITHUB_TOKEN = None
+        mock_get_settings.return_value = mock_settings
 
         # Mock GitHub repository
         mock_repo = Mock()
@@ -89,11 +93,15 @@ class TestFileFetching:
                     os.chdir(original_cwd)
 
     @patch("app.github.loader.Github")
-    @patch("app.github.loader.settings")
-    def test_fetch_repository_files_with_token(self, mock_settings, mock_github_class):
+    @patch("app.github.loader.get_settings")
+    def test_fetch_repository_files_with_token(
+        self, mock_get_settings, mock_github_class
+    ):
         """Test fetching repository files with GitHub token."""
         # Mock settings with token
+        mock_settings = Mock()
         mock_settings.GITHUB_TOKEN = "test_token"
+        mock_get_settings.return_value = mock_settings
 
         # Mock GitHub repository
         mock_repo = Mock()
@@ -146,13 +154,15 @@ class TestFileFetching:
                     os.chdir(original_cwd)
 
     @patch("app.github.loader.Github")
-    @patch("app.github.loader.settings")
+    @patch("app.github.loader.get_settings")
     def test_fetch_repository_files_docs_processing(
-        self, mock_settings, mock_github_class
+        self, mock_get_settings, mock_github_class
     ):
         """Test docs pattern processing."""
         # Mock settings
+        mock_settings = Mock()
         mock_settings.GITHUB_TOKEN = None
+        mock_get_settings.return_value = mock_settings
 
         # Mock GitHub repository
         mock_repo = Mock()

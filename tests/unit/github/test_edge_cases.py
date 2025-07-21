@@ -24,13 +24,15 @@ class TestEdgeCases:
             fetch_repository_files("https://gitlab.com/octocat/Hello-World")
 
     @patch("app.github.loader.Github")
-    @patch("app.github.loader.settings")
+    @patch("app.github.loader.get_settings")
     def test_fetch_repository_files_large_file_skip(
-        self, mock_settings, mock_github_class
+        self, mock_get_settings, mock_github_class
     ):
         """Test that large files are skipped."""
         # Mock settings
+        mock_settings = Mock()
         mock_settings.GITHUB_TOKEN = None
+        mock_get_settings.return_value = mock_settings
 
         # Mock GitHub repository
         mock_repo = Mock()
@@ -80,13 +82,15 @@ class TestEdgeCases:
                 os.chdir(original_cwd)
 
     @patch("app.github.loader.Github")
-    @patch("app.github.loader.settings")
+    @patch("app.github.loader.get_settings")
     def test_fetch_repository_files_unsupported_pattern(
-        self, mock_settings, mock_github_class
+        self, mock_get_settings, mock_github_class
     ):
         """Test fetching repository files with unsupported pattern."""
         # Mock settings
+        mock_settings = Mock()
         mock_settings.GITHUB_TOKEN = None
+        mock_get_settings.return_value = mock_settings
 
         # Mock GitHub repository
         mock_repo = Mock()
@@ -118,13 +122,15 @@ class TestEdgeCases:
                 os.chdir(original_cwd)
 
     @patch("app.github.loader.Github")
-    @patch("app.github.loader.settings")
+    @patch("app.github.loader.get_settings")
     def test_fetch_repository_files_readme_too_large_with_fallback(
-        self, mock_settings, mock_github_class
+        self, mock_get_settings, mock_github_class
     ):
         """Test README too large with fallback to search."""
         # Mock settings
+        mock_settings = Mock()
         mock_settings.GITHUB_TOKEN = None
+        mock_get_settings.return_value = mock_settings
 
         # Mock GitHub repository
         mock_repo = Mock()

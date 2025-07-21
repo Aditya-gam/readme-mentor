@@ -60,4 +60,5 @@ class Settings:
 
 
 # Global settings instance
-settings = Settings()
+def get_settings() -> Settings:
+    return Settings()
