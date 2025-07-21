@@ -27,17 +27,31 @@ def render_citations(answer_text: str, source_docs: List[Document]) -> str:
     if not isinstance(source_docs, list):
         raise TypeError("source_docs must be a list of Document objects")
 
-    # Find all opening and closing doc placeholders
+    # Extract document indices and build citations
+    doc_indices = _extract_document_indices(answer_text)
+    citations = _build_citations(doc_indices, source_docs)
+
+    # Limit citations and process answer
+    citations = _limit_citations(citations, answer_text)
+    answer_text = _replace_placeholders(answer_text, citations)
+    answer_text = _cleanup_placeholders(answer_text)
+
+    # Final processing
+    answer_text = answer_text.strip()
+    return _truncate_answer(answer_text)
+
+
+def _extract_document_indices(answer_text: str) -> set[int]:
+    """Extract unique document indices from opening tags."""
     opening_pattern = r"<doc_(\d+)>"
-    closing_pattern = r"</doc_(\d+)>"
-
     opening_matches = re.findall(opening_pattern, answer_text)
-    _ = re.findall(closing_pattern, answer_text)
+    return {int(idx) for idx in opening_matches}
 
-    # Get unique document indices from opening tags
-    doc_indices = set(int(idx) for idx in opening_matches)
 
-    # Build citations dictionary
+def _build_citations(
+    doc_indices: set[int], source_docs: List[Document]
+) -> Dict[int, str]:
+    """Build citations dictionary from document indices."""
     citations: Dict[int, str] = {}
     for doc_idx in doc_indices:
         if doc_idx < len(source_docs):
@@ -48,48 +62,56 @@ def render_citations(answer_text: str, source_docs: List[Document]) -> str:
             start_line = metadata.get("start_line")
             end_line = metadata.get("end_line")
 
-            # Validate metadata fields
-            if file_name and start_line is not None and end_line is not None:
+            if _validate_metadata_fields(file_name, start_line, end_line):
                 try:
                     start_line = int(start_line)
                     end_line = int(end_line)
                     citation_string = f"[{file_name} L{start_line}–{end_line}]"
                     citations[doc_idx] = citation_string
                 except (ValueError, TypeError):
-                    # Skip invalid line numbers
                     continue
+    return citations
 
-    # Limit to at most three unique citations
-    # Assuming source_docs are ordered by relevance (doc_0 most relevant)
+
+def _validate_metadata_fields(file_name, start_line, end_line) -> bool:
+    """Validate that metadata fields are present and not None."""
+    return file_name and start_line is not None and end_line is not None
+
+
+def _limit_citations(citations: Dict[int, str], answer_text: str) -> Dict[int, str]:
+    """Limit citations to at most three and remove excess placeholders."""
     sorted_doc_indices = sorted(citations.keys())
     if len(sorted_doc_indices) > 3:
         # Remove citations for documents beyond the first 3
         for doc_idx in sorted_doc_indices[3:]:
-            # Remove both opening and closing tags for this document
             answer_text = re.sub(rf"<doc_{doc_idx}>", "", answer_text)
             answer_text = re.sub(rf"</doc_{doc_idx}>", "", answer_text)
-
         # Keep only the first three citations
         citations = {k: citations[k] for k in sorted_doc_indices[:3]}
+    return citations
 
-    # Replace opening placeholders with actual citations
+
+def _replace_placeholders(answer_text: str, citations: Dict[int, str]) -> str:
+    """Replace opening placeholders with actual citations."""
     for doc_idx, citation_string in citations.items():
         answer_text = re.sub(rf"<doc_{doc_idx}>", citation_string, answer_text)
+    return answer_text
 
-    # Remove all remaining closing tags (for both cited and non-cited documents)
+
+def _cleanup_placeholders(answer_text: str) -> str:
+    """Clean up remaining closing tags and malformed placeholders."""
+    # Remove all remaining closing tags
     answer_text = re.sub(r"</doc_\d+>", "", answer_text)
-
     # Clean up any remaining malformed placeholders
     answer_text = re.sub(r"<doc_[^>]*>", "", answer_text)
+    return answer_text
 
-    # Trim trailing whitespace and newline characters
-    answer_text = answer_text.strip()
 
-    # Truncate to ~120 words
+def _truncate_answer(answer_text: str) -> str:
+    """Truncate answer to ~120 words."""
     words = answer_text.split()
     if len(words) > 120:
         answer_text = " ".join(words[:120]) + "..."
-
     return answer_text
 
 
