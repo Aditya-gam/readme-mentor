@@ -18,6 +18,8 @@ from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.vectorstores import VectorStore
 
+from app.rag.citations import render_citations
+
 
 def _format_docs(docs: List[Document]) -> str:
     """
@@ -44,6 +46,8 @@ class CustomStuffDocumentsChain(StuffDocumentsChain):
     <doc_0>, <doc_1>, etc. tokens as placeholders corresponding to each source.
     """
 
+    _source_docs: List[Document] = []  # To store source documents
+
     def _get_inputs(self, docs: List[Document], **kwargs: Any) -> dict[str, Any]:
         """
         Override the parent method to format documents with custom tags.
@@ -55,11 +59,31 @@ class CustomStuffDocumentsChain(StuffDocumentsChain):
         Returns:
             Dictionary containing the formatted documents and other inputs
         """
+        self._source_docs = docs  # Store the source documents
         # Call the super method to get basic inputs
         inputs = super()._get_inputs(docs, **kwargs)
         # Override the document variable with our custom formatted documents
         inputs[self.document_variable_name] = _format_docs(docs)
         return inputs
+
+    def _call(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        """
+        Override the parent method to post-process the LLM's answer with citations.
+
+        Args:
+            inputs: Dictionary containing the inputs to the chain
+
+        Returns:
+            Dictionary containing the processed answer
+        """
+        # Get the raw answer from the underlying LLMChain
+        raw_answer = self.llm_chain.predict(**inputs)
+
+        # Post-process the answer with citations
+        processed_answer = render_citations(raw_answer, self._source_docs)
+
+        # Return the processed answer under the chain's output_key
+        return {self.output_key: processed_answer}
 
 
 def _load_system_prompt() -> str:

@@ -49,7 +49,7 @@ class TestChainAssembly:
         self.get_qa_chain = get_qa_chain
         self._load_system_prompt = _load_system_prompt
         self._format_docs = _format_docs
-        self.CustomStuffDocumentsChain = CustomStuffDocumentsChain
+        self.custom_stuff_documents_chain = CustomStuffDocumentsChain
 
         # Create dummy documents for testing
         self.test_documents = [
@@ -354,7 +354,7 @@ class TestChainAssembly:
         llm_chain = LLMChain(llm=self.fake_llm, prompt=prompt_template)
 
         # Create the custom chain
-        custom_chain = self.CustomStuffDocumentsChain(
+        custom_chain = self.custom_stuff_documents_chain(
             llm_chain=llm_chain, document_variable_name="context"
         )
 
