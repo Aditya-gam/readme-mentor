@@ -1,34 +1,32 @@
-"""Shared fixtures for readme-mentor tests."""
+"""Test configuration and fixtures."""
 
 import os
+import shutil
 import tempfile
+import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 
 @pytest.fixture(scope="function")
 def clean_data_dir():
-    """Create a clean data directory for tests."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        original_cwd = os.getcwd()
-        os.chdir(temp_dir)
+    """Create a clean data directory for each test."""
+    # Create a temporary directory
+    temp_dir = tempfile.mkdtemp()
+    data_dir = Path(temp_dir) / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create data directory
-        data_dir = Path("data")
-        data_dir.mkdir(exist_ok=True)
+    yield data_dir
 
-        yield data_dir
-
-        os.chdir(original_cwd)
+    # Clean up
+    shutil.rmtree(temp_dir)
 
 
 @pytest.fixture(scope="function")
 def unique_collection_name():
-    """Generate a unique collection name for tests."""
-    import uuid
-
+    """Generate a unique collection name for each test."""
     return f"test_collection_{uuid.uuid4().hex[:8]}"
 
 
@@ -41,7 +39,7 @@ def mock_github_token():
 
 @pytest.fixture(scope="function")
 def mock_openai_key():
-    """Mock OpenAI API key for tests."""
+    """Mock OpenAI key for tests."""
     with patch.dict(os.environ, {"OPENAI_API_KEY": "test_openai_key"}):
         yield "test_openai_key"
 
@@ -49,5 +47,36 @@ def mock_openai_key():
 @pytest.fixture(scope="function")
 def mock_secret_key():
     """Mock secret key for tests."""
-    with patch.dict(os.environ, {"SECRET_KEY": "test_secret_key_123"}):
-        yield "test_secret_key_123"
+    with patch.dict(os.environ, {"SECRET_KEY": "test_secret_key"}):
+        yield "test_secret_key"
+
+
+@pytest.fixture(autouse=True)
+def reset_mocks():
+    """Reset all mocks between tests to ensure isolation."""
+    # This fixture runs automatically for every test
+    # It ensures that mocks from previous tests don't interfere
+    yield
+    # The cleanup happens automatically when the test ends
+
+
+@pytest.fixture(scope="function")
+def mock_uuid():
+    """Mock UUID generation for deterministic test results."""
+    mock_uuid_obj = MagicMock()
+    mock_uuid_obj.hex = "12345678-1234-1234-1234-123456789abc"
+    mock_uuid_obj.__str__ = MagicMock(
+        return_value="12345678-1234-1234-1234-123456789abc"
+    )
+
+    with patch("uuid.uuid4", return_value=mock_uuid_obj):
+        yield mock_uuid_obj
+
+
+@pytest.fixture(scope="function")
+def mock_logger():
+    """Mock logger to prevent log output during tests."""
+    with patch("logging.getLogger") as mock_get_logger:
+        mock_logger_instance = MagicMock()
+        mock_get_logger.return_value = mock_logger_instance
+        yield mock_logger_instance

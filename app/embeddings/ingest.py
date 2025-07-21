@@ -39,16 +39,24 @@ def _extract_repo_slug(repo_url: str) -> str:
     Returns:
         Repository slug (e.g., 'octocat_Hello-World')
     """
+    # Clean the URL by removing query parameters, fragments, and extra paths
+    cleaned_url = repo_url.split("?")[0].split("#")[0].rstrip("/")
+
     # Extract owner and repo name from URL
-    if "github.com" in repo_url:
-        parts = repo_url.rstrip("/").split("/")
-        if len(parts) >= 2:
-            owner = parts[-2]
-            repo_name = parts[-1].replace(".git", "")
-            return f"{owner}_{repo_name}"
+    if "github.com" in cleaned_url:
+        parts = cleaned_url.split("/")
+        # Find the github.com part and get the next two parts
+        try:
+            github_index = parts.index("github.com")
+            if len(parts) > github_index + 2:
+                owner = parts[github_index + 1]
+                repo_name = parts[github_index + 2].replace(".git", "")
+                return f"{owner}_{repo_name}"
+        except ValueError:
+            pass
 
     # Fallback: use URL as slug
-    return repo_url.replace("https://", "").replace("http://", "").replace("/", "_")
+    return cleaned_url.replace("https://", "").replace("http://", "").replace("/", "_")
 
 
 def _create_persist_directory(repo_slug: str) -> Path:
@@ -117,14 +125,30 @@ def _chunk_text_with_line_mapping(
         # Find the character range for this chunk in the original text
         chunk_start = text.find(chunk, current_pos)
         if chunk_start == -1:
-            # Fallback: use current position
+            # Fallback: use current position and try to find the chunk
+            # This can happen with overlap or when the splitter modifies the text
             chunk_start = current_pos
+            # Try to find a substring that matches as much as possible
+            for i in range(len(text) - len(chunk) + 1):
+                if text[i : i + len(chunk)] == chunk:
+                    chunk_start = i
+                    break
 
-        chunk_end = chunk_start + len(chunk)
+        chunk_end = min(chunk_start + len(chunk), len(text))
         current_pos = chunk_end
 
+        # Ensure we don't exceed text bounds
+        if chunk_start >= len(text):
+            chunk_start = len(text) - 1
+        if chunk_end > len(text):
+            chunk_end = len(text)
+
         # Get line range for this chunk
-        start_line, end_line = line_mapper.get_line_range(chunk_start, chunk_end)
+        try:
+            start_line, end_line = line_mapper.get_line_range(chunk_start, chunk_end)
+        except ValueError:
+            # Fallback: use the entire text range
+            start_line, end_line = 0, len(text.split("\n")) - 1
 
         # Create metadata
         metadata = {

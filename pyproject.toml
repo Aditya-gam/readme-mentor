@@ -27,6 +27,9 @@ dependencies = [
     "langchain-chroma (>=0.2.4,<0.3.0)",
 ]
 
+[project.scripts]
+readme-mentor-ingest = "app.embeddings.__main__:main"
+
 [tool.poetry]
 packages = [
     {include = "app"},

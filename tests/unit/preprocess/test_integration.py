@@ -18,15 +18,6 @@ class TestLineOffsetMappingIntegration:
 
     def test_line_offset_mapping_with_cleaned_content(self):
         """Test line offset mapping with cleaned markdown content."""
-        original_text = """# Header
-<!-- Comment -->
-Some text here
-```python
-def hello():
-    print("Hello")
-```
-More text"""
-
         cleaned_text = """# Header
 
 Some text here
@@ -45,7 +36,6 @@ More text"""
 
     def test_citation_scenario_single_line(self):
         """Test citation scenario with single line content."""
-        original_text = "This is a single line with important information."
         cleaned_text = "This is a single line with important information."
 
         mapper = LineOffsetMapper(cleaned_text)
@@ -56,10 +46,6 @@ More text"""
 
     def test_citation_scenario_multi_line(self):
         """Test citation scenario with multi-line content."""
-        original_text = """Line 1 with important info
-Line 2 with more details
-Line 3 with final notes"""
-
         cleaned_text = """Line 1 with important info
 Line 2 with more details
 Line 3 with final notes"""

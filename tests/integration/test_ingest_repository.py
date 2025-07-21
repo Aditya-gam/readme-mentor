@@ -100,7 +100,7 @@ class TestIngestRepository:
         assert len(call_args[1]["metadatas"]) == 3
 
         # Verify result
-        assert result == mock_vectorstore
+        assert result is mock_vectorstore
 
     @patch("app.embeddings.ingest._extract_repo_slug")
     @patch("app.embeddings.ingest.fetch_repository_files")
@@ -263,7 +263,7 @@ class TestIngestRepository:
             persist_directory="/tmp/test",
         )
 
-        assert result == mock_vectorstore
+        assert result is mock_vectorstore
 
     @patch("app.embeddings.ingest._generate_collection_name")
     @patch("app.embeddings.ingest.Chroma")
@@ -314,4 +314,4 @@ class TestIngestRepository:
             "https://github.com/test/repo", ("README*", "docs/**/*.md")
         )
 
-        assert result == mock_vectorstore
+        assert result is mock_vectorstore

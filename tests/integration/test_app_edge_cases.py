@@ -2,6 +2,7 @@
 
 import os
 import sys
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -30,7 +31,7 @@ class TestVersionEdgeCases:
             )
 
             with patch("app.version.tomllib.load") as mock_load:
-                mock_load.side_effect = Exception("Invalid TOML")
+                mock_load.side_effect = tomllib.TOMLDecodeError("Invalid TOML", "", 0)
 
                 from app.version import get_version
 
@@ -104,7 +105,7 @@ class TestAppInitEdgeCases:
 
     def test_validate_repo_url_invalid_pattern(self):
         """Test validate_repo_url with invalid URL pattern."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             from app.utils.validators import validate_repo_url
 
             validate_repo_url("not-a-url")

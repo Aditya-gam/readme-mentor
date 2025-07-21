@@ -33,7 +33,7 @@ def test_cli_help():
 
     # Test help command
     result = subprocess.run(
-        [sys.executable, "scripts/ingest_cli.py", "--help"],
+        [sys.executable, "-m", "app.embeddings", "--help"],
         capture_output=True,
         text=True,
         cwd=Path(__file__).parent.parent.parent,
@@ -55,7 +55,8 @@ def test_cli_basic_ingestion():
     result = subprocess.run(
         [
             sys.executable,
-            "scripts/ingest_cli.py",
+            "-m",
+            "app.embeddings",
             "https://github.com/octocat/Hello-World",
             "--chunk-size",
             "512",
@@ -81,7 +82,8 @@ def test_cli_invalid_repo():
     result = subprocess.run(
         [
             sys.executable,
-            "scripts/ingest_cli.py",
+            "-m",
+            "app.embeddings",
             "https://github.com/nonexistent/repo",
         ],
         capture_output=True,

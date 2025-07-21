@@ -82,7 +82,7 @@ class TestProcessFileForChunking:
             # Clean up
             os.unlink(temp_file)
 
-    @patch("tests.unit.embeddings.test_chunking.clean_markdown_file")
+    @patch("app.embeddings.ingest.clean_markdown_file")
     def test_process_file_exception(self, mock_clean):
         """Test file processing with exception."""
         # Setup mock to raise exception

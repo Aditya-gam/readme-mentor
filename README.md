@@ -50,10 +50,13 @@ Ingest a repository using the command-line interface:
 
 ```bash
 # Basic ingestion
-python -m app.embeddings.ingest https://github.com/octocat/Hello-World
+python -m app.embeddings https://github.com/octocat/Hello-World
+
+# Using the installed CLI command
+readme-mentor-ingest https://github.com/octocat/Hello-World
 
 # With custom parameters
-python -m app.embeddings.ingest https://github.com/user/repo \
+python -m app.embeddings https://github.com/user/repo \
   --chunk-size 512 \
   --file-glob "*.md" "docs/**/*.md" \
   --persist-dir ./data/chroma
