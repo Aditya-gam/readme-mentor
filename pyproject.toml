@@ -25,6 +25,9 @@ dependencies = [
     "beautifulsoup4 (>=4.13.4,<5.0.0)",
     "chardet (>=5.2.0,<6.0.0)",
     "langchain-chroma (>=0.2.4,<0.3.0)",
+    "langchain-ollama (>=0.3.5,<0.4.0)",
+    "langchain-openai (>=0.3.28,<0.4.0)",
+    "requests (>=2.32.4,<3.0.0)",
 ]
 
 [project.scripts]
@@ -67,10 +70,6 @@ addopts = [
     "--strict-config",
     "--verbose",
     "--tb=short",
-    "--cov=app",
-    "--cov-report=term-missing",
-    "--cov-report=html:cache/htmlcov",
-    "--cov-report=xml:cache/coverage.xml",
 ]
 cache_dir = "cache/.pytest_cache"
 
