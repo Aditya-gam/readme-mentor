@@ -1,6 +1,6 @@
 from typing import List, Tuple
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class QuestionPayload(BaseModel):
@@ -15,7 +15,8 @@ class QuestionPayload(BaseModel):
         description="A list of prior QA pairs (human_message, ai_message).",
     )
 
-    @validator("query", "repo_id")
+    @field_validator("query", "repo_id")
+    @classmethod
     def not_empty_or_whitespace(cls, v):
         if not v or v.strip() == "":
             raise ValueError("Field cannot be empty or contain only whitespace.")

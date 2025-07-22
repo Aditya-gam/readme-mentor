@@ -95,7 +95,7 @@ def generate_answer(
 
         # Step 5: Execute the chain with return_source_documents=True
         logger.info("Executing QA chain")
-        result = qa_chain({"question": query, "chat_history": chat_history})
+        result = qa_chain.invoke({"question": query, "chat_history": chat_history})
 
         # Extract the raw answer and source documents
         raw_answer = result.get("answer", "")

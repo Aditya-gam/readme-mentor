@@ -40,7 +40,7 @@ def _format_docs(docs: List[Document]) -> str:
 class CustomStuffDocumentsChain(StuffDocumentsChain):
     """
     Custom StuffDocumentsChain that formats documents with <doc_i> tags
-    before passing them to the underlying LLMChain.
+    before passing them to the underlying LLM chain.
 
     This ensures that when the LLM generates an answer, it can include
     <doc_0>, <doc_1>, etc. tokens as placeholders corresponding to each source.
@@ -192,6 +192,8 @@ def get_qa_chain(
     )
 
     # Create the LLMChain that will be used by our custom combine documents chain
+    # Note: Using LLMChain instead of RunnableSequence because StuffDocumentsChain
+    # expects LLMChain. This will be updated when LangChain provides a migration path.
     qa_llm_chain = LLMChain(llm=llm, prompt=qa_llm_prompt)
 
     # Create the custom combine documents chain
@@ -201,9 +203,6 @@ def get_qa_chain(
         llm_chain=qa_llm_chain,
         document_variable_name="context",  # Must match the placeholder in qa_llm_prompt
     )
-
-    # Ensure the custom chain has the correct prompt template
-    combine_docs_chain.llm_chain.prompt = qa_llm_prompt
 
     # Assemble the ConversationalRetrievalChain
     # We use the from_llm method with combine_docs_chain_kwargs to ensure proper configuration

@@ -82,9 +82,37 @@ def get_vector_store(
 
     try:
         logger.info(f"Loading vector store from: {vector_store_path}")
-        vector_store = Chroma(
-            persist_directory=str(vector_store_path), embedding_function=embedding_model
-        )
+
+        # Find the collection that contains documents for this repository
+        import chromadb
+
+        client = chromadb.PersistentClient(path=str(vector_store_path))
+        collections = client.list_collections()
+
+        # Look for a collection that starts with the repo_id and has documents
+        target_collection = None
+        for collection in collections:
+            if collection.name.startswith(repo_id) and collection.count() > 0:
+                target_collection = collection.name
+                logger.info(f"Found collection with documents: {target_collection}")
+                break
+
+        if target_collection is None:
+            # Fallback to default collection
+            logger.warning(
+                f"No collection found with documents for {repo_id}, using default"
+            )
+            vector_store = Chroma(
+                persist_directory=str(vector_store_path),
+                embedding_function=embedding_model,
+            )
+        else:
+            # Use the specific collection that contains documents
+            vector_store = Chroma(
+                collection_name=target_collection,
+                persist_directory=str(vector_store_path),
+                embedding_function=embedding_model,
+            )
 
         # Verify the vector store has documents
         # Try a simple search to check if the store is working

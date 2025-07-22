@@ -1,6 +1,6 @@
 [project]
 name = "readme-mentor"
-version = "0.2.4"
+version = "0.2.5"
 description = "AI-powered README generation and mentoring tool"
 authors = [
     {name = "Aditya Gambhir",email = "67105262+Aditya-gam@users.noreply.github.com"}
@@ -29,6 +29,7 @@ dependencies = [
     "langchain-openai (>=0.3.28,<0.4.0)",
     "requests (>=2.32.4,<3.0.0)",
     "openai (>=1.97.0,<2.0.0)",
+    "langchain-core (>=0.3.70,<0.4.0)",
 ]
 
 [project.scripts]
@@ -71,8 +72,6 @@ addopts = [
     "--strict-config",
     "--verbose",
     "--tb=short",
-    "-W",
-    "ignore::langchain_core._api.deprecation.LangChainDeprecationWarning",
 ]
 cache_dir = "cache/.pytest_cache"
 
