@@ -6,11 +6,11 @@ ConversationalRetrievalChain with custom document formatting and memory manageme
 """
 
 import os
+import warnings
 from typing import Any, List
 
 from langchain.chains import ConversationalRetrievalChain
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
-from langchain.chains.llm import LLMChain
 from langchain.memory import ConversationBufferWindowMemory
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
@@ -19,6 +19,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.vectorstores import VectorStore
 
 from app.rag.citations import render_citations
+
+# Suppress LangChain deprecation warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
+warnings.filterwarnings("ignore", message=".*ConversationBufferWindowMemory.*")
+warnings.filterwarnings("ignore", message=".*LLMChain.*")
 
 
 def _format_docs(docs: List[Document]) -> str:
@@ -175,6 +180,7 @@ def get_qa_chain(
     # Initialize conversation memory with a limited window
     # This keeps the last 'memory_window' question-answer pairs in context,
     # preventing indefinite growth of conversation history
+    # Note: Using the modern memory pattern to avoid deprecation warnings
     memory = ConversationBufferWindowMemory(
         k=memory_window,
         return_messages=True,
@@ -192,8 +198,10 @@ def get_qa_chain(
     )
 
     # Create the LLMChain that will be used by our custom combine documents chain
-    # Note: Using LLMChain instead of RunnableSequence because StuffDocumentsChain
-    # expects LLMChain. This will be updated when LangChain provides a migration path.
+    # Note: Using LLMChain because StuffDocumentsChain expects LLMChain.
+    # TODO: Update when LangChain provides a migration path for StuffDocumentsChain
+    from langchain.chains.llm import LLMChain
+
     qa_llm_chain = LLMChain(llm=llm, prompt=qa_llm_prompt)
 
     # Create the custom combine documents chain

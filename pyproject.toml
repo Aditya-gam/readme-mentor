@@ -74,6 +74,10 @@ addopts = [
     "--tb=short",
 ]
 cache_dir = "cache/.pytest_cache"
+filterwarnings = [
+    "ignore::DeprecationWarning:langchain*",
+    "ignore::UserWarning:langchain*",
+]
 
 [tool.coverage.run]
 source = ["app"]

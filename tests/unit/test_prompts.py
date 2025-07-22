@@ -4,7 +4,7 @@ from langchain.prompts import PromptTemplate
 from app.prompts import PROMPTS_DIR, get_prompts, load_system_prompt, load_user_prompt
 
 # Define the expected content for the system prompt
-EXPECTED_SYSTEM_PROMPT_CONTENT = "You are an assistant for a GitHub repository Q&A. Provide brief, factual answers with sources cited inline in the format `[filename L[start]-L[end]]`. Do not deviate from the repository content."
+EXPECTED_SYSTEM_PROMPT_CONTENT = "You are an assistant for a GitHub repository Q&A. Provide brief, factual answers with sources cited inline using the format <doc_0>, <doc_1>, etc. where the number corresponds to the source document provided in the context. Do not deviate from the repository content. Always include at least one citation when providing information from the source documents."
 
 
 @pytest.fixture
