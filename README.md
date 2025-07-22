@@ -171,6 +171,7 @@ The project includes comprehensive tests covering:
 
 - **Unit Tests**: Individual component testing
 - **Integration Tests**: End-to-end pipeline testing
+- **Performance Tests**: Response time validation and monitoring
 - **Edge Cases**: Error handling and boundary conditions
 - **CLI Tests**: Command-line interface validation
 
@@ -180,6 +181,66 @@ Current test coverage targets:
 - **Minimum**: 85% overall coverage
 - **Critical Paths**: 100% coverage for ingestion pipeline
 - **Edge Cases**: Comprehensive error handling tests
+
+### Performance Testing
+
+The project includes comprehensive performance testing to ensure the QA system meets response time requirements:
+
+#### Performance Thresholds
+
+Performance thresholds are environment-specific:
+
+- **CI Environment**: More lenient thresholds due to resource constraints
+  - E2E QA Response: 5 seconds
+  - Vector Search: 1 second
+  - LLM Response: 4 seconds
+
+- **Local Development**: Standard thresholds for development
+  - E2E QA Response: 3 seconds
+  - Vector Search: 500ms
+  - LLM Response: 2.5 seconds
+
+- **Production**: Strict thresholds for production use
+  - E2E QA Response: 2 seconds
+  - Vector Search: 300ms
+  - LLM Response: 1.5 seconds
+
+#### Running Performance Tests
+
+```bash
+# Run all performance tests
+poetry run pytest tests/integration/test_performance.py -v
+
+# Run performance tests with strict enforcement
+STRICT_PERFORMANCE=true poetry run pytest tests/integration/test_performance.py -v
+
+# Run only performance tests (excluding other integration tests)
+poetry run pytest -m "performance" --verbose
+```
+
+#### Performance Monitoring in CI
+
+Performance tests are automatically run in CI and provide detailed metrics:
+
+- **Latency Measurement**: Precise timing of all operations
+- **Environment Detection**: Automatic threshold selection based on environment
+- **CI-Friendly Output**: Structured logging for GitHub Actions
+- **Graceful Degradation**: Warnings in CI, strict enforcement in production
+
+#### Performance Configuration
+
+Performance thresholds can be customized via environment variables:
+
+```bash
+# Override strict enforcement behavior
+STRICT_PERFORMANCE=true  # Force strict enforcement
+STRICT_PERFORMANCE=false # Force lenient enforcement
+
+# Environment detection
+CI=true                  # Automatically detected in CI
+GITHUB_ACTIONS=true      # Automatically detected in GitHub Actions
+ENVIRONMENT=production   # Set production environment
+```
 
 ## Contributing
 

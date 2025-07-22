@@ -66,6 +66,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "performance: marks tests as performance tests (deselect with '-m \"not performance\"')",
 ]
 addopts = [
     "--strict-markers",

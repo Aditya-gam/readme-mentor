@@ -131,7 +131,37 @@ def generate_answer(
 
     except ValidationError as e:
         logger.error(f"Input validation failed: {e.errors()}")
-        raise ValueError(f"Invalid input payload: {e.errors()}") from e
+        # Provide more user-friendly error messages
+        error_messages = []
+        for error in e.errors():
+            field = error.get("loc", ["unknown"])[0]
+            msg = error.get("msg", "Invalid value")
+            if field == "query" and "string_too_short" in error.get("type", ""):
+                error_messages.append(
+                    "Query cannot be empty. Please provide a question."
+                )
+            elif field == "repo_id" and "string_too_short" in error.get("type", ""):
+                error_messages.append("Repository ID cannot be empty.")
+            elif (
+                field == "query"
+                and "value_error" in error.get("type", "")
+                and "whitespace" in msg.lower()
+            ):
+                error_messages.append(
+                    "Query cannot be empty or contain only whitespace. Please provide a question."
+                )
+            elif (
+                field == "repo_id"
+                and "value_error" in error.get("type", "")
+                and "whitespace" in msg.lower()
+            ):
+                error_messages.append(
+                    "Repository ID cannot be empty or contain only whitespace."
+                )
+            else:
+                error_messages.append(f"{field}: {msg}")
+
+        raise ValueError(f"Validation error: {'; '.join(error_messages)}") from e
 
     except ValueError as e:
         logger.error(f"Value error during processing: {e}")
@@ -166,12 +196,34 @@ def _extract_citation_metadata(
 
         # Extract file information
         file_name = metadata.get("file") or metadata.get("source")
-        start_line = metadata.get("start_line") or metadata.get("line_start")
-        end_line = metadata.get("end_line") or metadata.get("line_end")
+        start_line = metadata.get("start_line")
+        if start_line is None:
+            start_line = metadata.get("line_start")
+        end_line = metadata.get("end_line")
+        if end_line is None:
+            end_line = metadata.get("line_end")
+
+        # # Debug logging to understand the issue
+        # logger.debug(f"Metadata: {metadata}")
+        # logger.debug(
+        #     f"Extracted - file_name: {file_name}, start_line: {start_line}, end_line: {end_line}")
+        # logger.debug(
+        #     f"start_line type: {type(start_line)}, value: {start_line}")
 
         # Validate metadata fields
-        if not all([file_name, start_line is not None, end_line is not None]):
-            logger.warning(f"Skipping document with incomplete metadata: {metadata}")
+        missing_fields = []
+        if not file_name:
+            missing_fields.append("file")
+        if start_line is None:
+            missing_fields.append("start_line")
+        if end_line is None:
+            missing_fields.append("end_line")
+
+        if missing_fields:
+            logger.warning(
+                f"Skipping document with missing metadata fields: {missing_fields}. "
+                f"Available fields: {list(metadata.keys())}"
+            )
             continue
 
         try:

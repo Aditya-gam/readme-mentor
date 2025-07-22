@@ -139,10 +139,12 @@ class TestGenerateAnswer:
 
         # Verify error message
         error_message = str(exc_info.value)
-        assert "Invalid input payload" in error_message, (
+        assert "Validation error" in error_message, (
             "Should raise validation error for empty query"
         )
-        assert "query" in error_message.lower(), "Error should mention query field"
+        assert "Query cannot be empty" in error_message, (
+            "Error should mention empty query"
+        )
 
         logger.info("Successfully caught validation error for empty query")
 
@@ -156,10 +158,12 @@ class TestGenerateAnswer:
 
         # Verify error message
         error_message = str(exc_info.value)
-        assert "Invalid input payload" in error_message, (
+        assert "Validation error" in error_message, (
             "Should raise validation error for empty repo_id"
         )
-        assert "repo_id" in error_message.lower(), "Error should mention repo_id field"
+        assert "Repository ID cannot be empty" in error_message, (
+            "Error should mention empty repo_id"
+        )
 
         logger.info("Successfully caught validation error for empty repo_id")
 
@@ -172,7 +176,7 @@ class TestGenerateAnswer:
             generate_answer("   ", TEST_REPO_ID)
 
         error_message = str(exc_info.value)
-        assert "Invalid input payload" in error_message, (
+        assert "Validation error" in error_message, (
             "Should raise validation error for whitespace-only query"
         )
 
@@ -181,7 +185,7 @@ class TestGenerateAnswer:
             generate_answer("What is this project?", "   ")
 
         error_message = str(exc_info.value)
-        assert "Invalid input payload" in error_message, (
+        assert "Validation error" in error_message, (
             "Should raise validation error for whitespace-only repo_id"
         )
 

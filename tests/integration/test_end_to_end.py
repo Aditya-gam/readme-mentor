@@ -9,6 +9,10 @@ import pytest
 
 from app.backend import generate_answer
 from app.embeddings.ingest import ingest_repository
+from tests.integration.test_performance_config import (
+    PerformanceConfig,
+    log_performance_metrics,
+)
 
 # Configure logging for the test
 logging.basicConfig(level=logging.INFO)
@@ -89,6 +93,8 @@ def setup_pytest_repo_ingestion():
     logger.info(f"Cleanup complete for {repo_id}.")
 
 
+@pytest.mark.integration
+@pytest.mark.performance
 def test_e2e_pytest_qa(setup_pytest_repo_ingestion):
     """
     End-to-end test that validates the complete QA pipeline.
@@ -99,6 +105,8 @@ def test_e2e_pytest_qa(setup_pytest_repo_ingestion):
     3. Validates the response structure and content
     4. Verifies citation correctness by cross-checking source text
     5. Ensures the answer is grounded in the source documentation
+    6. **NEW**: Validates performance - ensures response completes within 3 seconds
+    7. **NEW**: Provides detailed performance breakdown for CI monitoring
 
     The test requires either:
     - A running Ollama instance with the 'llama3:8b' model, or
@@ -115,7 +123,15 @@ def test_e2e_pytest_qa(setup_pytest_repo_ingestion):
     logger.info(f"Query: {query}")
     logger.info(f"History length: {len(history)}")
 
-    # Execute the QA query
+    # Get performance configuration before test
+    config = PerformanceConfig.get_config_summary()
+    logger.info(f"Performance environment: {config['environment']}")
+    logger.info(
+        f"E2E QA threshold: {PerformanceConfig.get_threshold('e2e_qa_response')}ms"
+    )
+    logger.info(f"Strict enforcement: {config['strict_enforcement']}")
+
+    # Execute the QA query with performance measurement
     query_start_time = time.perf_counter()
     try:
         result = generate_answer(query=query, repo_id=repo_id, history=history)
@@ -135,6 +151,40 @@ def test_e2e_pytest_qa(setup_pytest_repo_ingestion):
     logger.info(f"Reported latency: {result['latency_ms']:.2f} ms")
     logger.info(f"Actual query time: {query_time * 1000:.2f} ms")
 
+    # **PERFORMANCE VALIDATION**: Use environment-specific thresholds
+    actual_latency_ms = result["latency_ms"]
+
+    # Log performance metrics using the new configuration system
+    log_performance_metrics("e2e_qa_response", actual_latency_ms)
+
+    # **ENHANCED PERFORMANCE MONITORING**: Detailed breakdown for CI
+    threshold = PerformanceConfig.get_threshold("e2e_qa_response")
+    performance_status = "PASS" if actual_latency_ms < threshold else "FAIL"
+
+    # CI-friendly performance output
+    print("PERFORMANCE_BREAKDOWN:")
+    print("  Operation: E2E QA Response")
+    print(f"  Environment: {config['environment']}")
+    print(f"  Actual Latency: {actual_latency_ms:.2f}ms")
+    print(f"  Threshold: {threshold}ms")
+    print(f"  Status: {performance_status}")
+    print(f"  Strict Enforcement: {config['strict_enforcement']}")
+    print(f"  Answer Length: {len(result['answer'])} chars")
+    print(f"  Citations Count: {len(result['citations'])}")
+
+    # Performance assertion based on configuration
+    if actual_latency_ms >= threshold:
+        if PerformanceConfig.should_strict_enforce():
+            pytest.fail(
+                f"Performance threshold exceeded: {actual_latency_ms:.2f}ms >= "
+                f"{threshold}ms (Environment: {config['environment']})"
+            )
+        else:
+            logger.warning(
+                f"Performance threshold exceeded but not strictly enforced: "
+                f"{actual_latency_ms:.2f}ms >= {threshold}ms (Environment: {config['environment']})"
+            )
+
     # Validate answer content
     logger.info("Validating answer content...")
     _validate_answer_content(result["answer"])
@@ -144,8 +194,10 @@ def test_e2e_pytest_qa(setup_pytest_repo_ingestion):
     _validate_citations(result["citations"], repo_id)
 
     logger.info("End-to-end test completed successfully!")
+    print(f"PERFORMANCE_TEST_COMPLETED: {performance_status}")
 
 
+@pytest.mark.integration
 def test_vector_store_retrieval(setup_pytest_repo_ingestion):
     """
     Test that the vector store can retrieve relevant documents for the test query.
@@ -170,20 +222,31 @@ def test_vector_store_retrieval(setup_pytest_repo_ingestion):
     embedding_model = get_embedding_model()
     vector_store = get_vector_store(repo_id, embedding_model)
 
-    # Test basic similarity search
+    # Test basic similarity search with performance measurement
     logger.info("Testing basic similarity search...")
+    search_start_time = time.perf_counter()
     results = vector_store.similarity_search(query, k=4)
-    logger.info(f"Basic similarity search returned {len(results)} documents")
+    search_time = time.perf_counter() - search_start_time
+    logger.info(
+        f"Basic similarity search returned {len(results)} documents in {search_time * 1000:.2f}ms"
+    )
 
     for i, doc in enumerate(results):
         logger.info(f"Document {i}: {doc.metadata}")
         logger.info(f"Content preview: {doc.page_content[:200]}...")
 
-    # Test MMR search (same as used in the chain)
+    # Test MMR search (same as used in the chain) with performance measurement
     logger.info("Testing MMR search...")
+    mmr_start_time = time.perf_counter()
     retriever = vector_store.as_retriever(search_type="mmr", search_kwargs={"k": 4})
     mmr_results = retriever.invoke(query)
-    logger.info(f"MMR search returned {len(mmr_results)} documents")
+    mmr_time = time.perf_counter() - mmr_start_time
+    logger.info(
+        f"MMR search returned {len(mmr_results)} documents in {mmr_time * 1000:.2f}ms"
+    )
+
+    # Log performance metrics for vector search
+    log_performance_metrics("vector_search", mmr_time * 1000)
 
     for i, doc in enumerate(mmr_results):
         logger.info(f"MMR Document {i}: {doc.metadata}")
