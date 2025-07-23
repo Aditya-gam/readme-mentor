@@ -317,134 +317,166 @@ def auto_ingest_repository(repo_url: str, args: argparse.Namespace) -> str:
     return repo_slug
 
 
-def run_qa(args: argparse.Namespace) -> int:
-    """Run the interactive Q&A command with enhanced features."""
-    try:
-        print("🤖 Starting enhanced interactive Q&A session...")
-
-        # Determine repo_id and handle auto-ingestion
-        repo_id = None
-        if args.repo_id:
-            repo_id = args.repo_id
-            print(f"📚 Loading pre-ingested repository: {repo_id}")
-
-            if not check_repository_exists(repo_id):
-                print(f"❌ Repository '{repo_id}' not found or has no data")
-                print(
-                    "💡 Try ingesting it first: readme-mentor ingest <repo_url> --save"
-                )
-                return 1
-
-        elif args.repo_url:
-            from .embeddings.ingest import _extract_repo_slug
-            from .utils.validators import validate_repo_url
-
-            validated_url = validate_repo_url(args.repo_url)
-            repo_slug = _extract_repo_slug(validated_url)
-            repo_id = repo_slug
-
-            print(f"📚 Checking repository: {repo_id}")
-
-            # Check if repository exists, if not auto-ingest
-            if not check_repository_exists(repo_id):
-                repo_id = auto_ingest_repository(args.repo_url, args)
-
-        if not repo_id:
-            print("❌ No repository ID or URL provided")
-            return 1
-
-        print(f"✅ Repository ready: {repo_id}")
-
-        # Initialize chat session
-        chat_session = ChatSession(repo_id, args.clear_history)
-
-        print("\n" + "=" * 60)
-        print("💬 Interactive Q&A Session Started")
-        print("=" * 60)
-        print("💡 Commands:")
+def _handle_special_commands(question: str, chat_session: ChatSession) -> bool:
+    """Handle special commands and return True if command was processed."""
+    if question.lower() in ["quit", "exit", "q"]:
+        print("👋 Goodbye!")
+        return True
+    elif question.lower() == "history":
+        chat_session.display_history()
+        return True
+    elif question.lower() == "clear":
+        chat_session.chat_history.clear()
+        print("🗑️  Chat history cleared")
+        return True
+    elif question.lower() == "help":
+        print("\n💡 Available commands:")
         print("   - Type your question and press Enter")
         print("   - Type 'history' to see previous exchanges")
         print("   - Type 'clear' to clear chat history")
         print("   - Type 'quit', 'exit', or 'q' to end session")
         print("   - Type 'help' for this help message")
-        print("=" * 60)
+        return True
+    return False
 
-        # Interactive Q&A loop
-        while True:
-            try:
-                question = input("\n❓ Question: ").strip()
 
-                # Handle special commands
+def _display_answer_with_metadata(result: dict, chat_session: ChatSession):
+    """Display answer with citations and performance metrics."""
+    answer = result["answer"]
+    print("\n🤖 Answer:")
+    print(f"{answer}")
+
+    # Display citations if available
+    if result.get("citations"):
+        print(f"\n📖 Sources ({len(result['citations'])}):")
+        for i, citation in enumerate(result["citations"], 1):
+            file_path = citation.get("file", "Unknown")
+            start_line = citation.get("start_line", "?")
+            end_line = citation.get("end_line", "?")
+            print(f"  {i}. {file_path} (lines {start_line}-{end_line})")
+
+    # Display performance metrics
+    latency = result.get("latency_ms", 0)
+    print(f"\n⏱️  Response time: {latency:.0f}ms")
+    print(f"💬 Total exchanges in session: {len(chat_session.chat_history)}")
+
+
+def _process_question(question: str, repo_id: str, chat_session: ChatSession):
+    """Process a single question and generate answer."""
+    print("🤔 Thinking...")
+
+    # Generate answer using the backend with chat history
+    from .backend import generate_answer
+
+    result = generate_answer(
+        question, repo_id, history=chat_session.get_history_for_backend()
+    )
+
+    # Add to chat history
+    chat_session.add_exchange(question, result["answer"])
+
+    # Display the answer with metadata
+    _display_answer_with_metadata(result, chat_session)
+
+
+def _setup_repository(args: argparse.Namespace) -> str:
+    """Set up repository and return repo_id."""
+    if args.repo_id:
+        print(f"📚 Loading pre-ingested repository: {args.repo_id}")
+        if not check_repository_exists(args.repo_id):
+            print(f"❌ Repository '{args.repo_id}' not found or has no data")
+            print("💡 Try ingesting it first: readme-mentor ingest <repo_url> --save")
+            raise ValueError(f"Repository '{args.repo_id}' not found")
+        return args.repo_id
+
+    elif args.repo_url:
+        from .embeddings.ingest import _extract_repo_slug
+        from .utils.validators import validate_repo_url
+
+        validated_url = validate_repo_url(args.repo_url)
+        repo_slug = _extract_repo_slug(validated_url)
+        repo_id = repo_slug
+
+        print(f"📚 Checking repository: {repo_id}")
+
+        # Check if repository exists, if not auto-ingest
+        if not check_repository_exists(repo_id):
+            repo_id = auto_ingest_repository(args.repo_url, args)
+        return repo_id
+
+    raise ValueError("No repository ID or URL provided")
+
+
+def _print_session_help():
+    """Print session help information."""
+    print("\n" + "=" * 60)
+    print("💬 Interactive Q&A Session Started")
+    print("=" * 60)
+    print("💡 Commands:")
+    print("   - Type your question and press Enter")
+    print("   - Type 'history' to see previous exchanges")
+    print("   - Type 'clear' to clear chat history")
+    print("   - Type 'quit', 'exit', or 'q' to end session")
+    print("   - Type 'help' for this help message")
+    print("=" * 60)
+
+
+def _run_interactive_loop(
+    repo_id: str, chat_session: ChatSession, args: argparse.Namespace
+):
+    """Run the interactive Q&A loop."""
+    while True:
+        try:
+            question = input("\n❓ Question: ").strip()
+
+            # Handle special commands
+            if _handle_special_commands(question, chat_session):
                 if question.lower() in ["quit", "exit", "q"]:
-                    print("👋 Goodbye!")
                     break
-                elif question.lower() == "history":
-                    chat_session.display_history()
-                    continue
-                elif question.lower() == "clear":
-                    chat_session.chat_history.clear()
-                    print("🗑️  Chat history cleared")
-                    continue
-                elif question.lower() == "help":
-                    print("\n💡 Available commands:")
-                    print("   - Type your question and press Enter")
-                    print("   - Type 'history' to see previous exchanges")
-                    print("   - Type 'clear' to clear chat history")
-                    print("   - Type 'quit', 'exit', or 'q' to end session")
-                    print("   - Type 'help' for this help message")
-                    continue
+                continue
 
-                if not question:
-                    continue
+            if not question:
+                continue
 
-                print("🤔 Thinking...")
+            # Process the question
+            _process_question(question, repo_id, chat_session)
 
-                # Generate answer using the backend with chat history
-                from .backend import generate_answer
+        except KeyboardInterrupt:
+            print("\n👋 Goodbye!")
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            if args.verbose:
+                logger.exception(FULL_TRACEBACK_MSG)
 
-                result = generate_answer(
-                    question, repo_id, history=chat_session.get_history_for_backend()
-                )
 
-                answer = result["answer"]
+def _print_session_summary(chat_session: ChatSession, repo_id: str):
+    """Print session summary."""
+    session_duration = datetime.now() - chat_session.session_start
+    print("\n📊 Session Summary:")
+    print(f"   Duration: {session_duration}")
+    print(f"   Total exchanges: {len(chat_session.chat_history)}")
+    print(f"   Repository: {repo_id}")
 
-                # Add to chat history
-                chat_session.add_exchange(question, answer)
 
-                # Display the answer with formatting
-                print("\n🤖 Answer:")
-                print(f"{answer}")
+def run_qa(args: argparse.Namespace) -> int:
+    """Run the interactive Q&A command with enhanced features."""
+    try:
+        print("🤖 Starting enhanced interactive Q&A session...")
 
-                # Display citations if available
-                if result.get("citations"):
-                    print(f"\n📖 Sources ({len(result['citations'])}):")
-                    for i, citation in enumerate(result["citations"], 1):
-                        file_path = citation.get("file", "Unknown")
-                        start_line = citation.get("start_line", "?")
-                        end_line = citation.get("end_line", "?")
-                        print(f"  {i}. {file_path} (lines {start_line}-{end_line})")
+        # Set up repository
+        repo_id = _setup_repository(args)
+        print(f"✅ Repository ready: {repo_id}")
 
-                # Display performance metrics
-                latency = result.get("latency_ms", 0)
-                print(f"\n⏱️  Response time: {latency:.0f}ms")
-                print(
-                    f"💬 Total exchanges in session: {len(chat_session.chat_history)}"
-                )
+        # Initialize chat session
+        chat_session = ChatSession(repo_id, args.clear_history)
+        _print_session_help()
 
-            except KeyboardInterrupt:
-                print("\n👋 Goodbye!")
-                break
-            except Exception as e:
-                print(f"❌ Error: {e}")
-                if args.verbose:
-                    logger.exception(FULL_TRACEBACK_MSG)
+        # Run interactive loop
+        _run_interactive_loop(repo_id, chat_session, args)
 
-        # Session summary
-        session_duration = datetime.now() - chat_session.session_start
-        print("\n📊 Session Summary:")
-        print(f"   Duration: {session_duration}")
-        print(f"   Total exchanges: {len(chat_session.chat_history)}")
-        print(f"   Repository: {repo_id}")
+        # Print session summary
+        _print_session_summary(chat_session, repo_id)
 
         return 0
 
