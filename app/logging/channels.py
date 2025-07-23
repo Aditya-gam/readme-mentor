@@ -234,6 +234,38 @@ class UserOutput:
             finally:
                 self._current_status = None
 
+    def _create_rich_table(
+        self, data: List[Dict[str, Any]], title: str, show_header: bool, **kwargs
+    ) -> Table:
+        """Create a Rich table from data."""
+        table = Table(title=title, show_header=show_header, **kwargs)
+
+        # Add columns based on first row
+        if data:
+            for key in data[0].keys():
+                table.add_column(str(key), style="cyan")
+
+            # Add rows
+            for row in data:
+                table.add_row(*[str(value) for value in row.values()])
+
+        return table
+
+    def _print_plain_table(
+        self, data: List[Dict[str, Any]], title: str, show_header: bool
+    ) -> None:
+        """Print table in plain text format."""
+        if title:
+            self.info(title)
+
+        if data and show_header:
+            headers = list(data[0].keys())
+            self.info(" | ".join(headers))
+            self.info("-" * len(" | ".join(headers)))
+
+        for row in data:
+            self.info(" | ".join(str(value) for value in row.values()))
+
     def print_table(
         self,
         data: List[Dict[str, Any]],
@@ -253,30 +285,10 @@ class UserOutput:
             return
 
         if self.config.output_format.value == "rich":
-            table = Table(title=title, show_header=show_header, **kwargs)
-
-            # Add columns based on first row
-            if data:
-                for key in data[0].keys():
-                    table.add_column(str(key), style="cyan")
-
-                # Add rows
-                for row in data:
-                    table.add_row(*[str(value) for value in row.values()])
-
-                self.console.print(table)
+            table = self._create_rich_table(data, title, show_header, **kwargs)
+            self.console.print(table)
         else:
-            # Fallback to plain text
-            if title:
-                self.info(title)
-
-            if data and show_header:
-                headers = list(data[0].keys())
-                self.info(" | ".join(headers))
-                self.info("-" * len(" | ".join(headers)))
-
-            for row in data:
-                self.info(" | ".join(str(value) for value in row.values()))
+            self._print_plain_table(data, title, show_header)
 
     def print_panel(self, content: str, title: str = "", **kwargs: Any) -> None:
         """Print content in a panel.
@@ -318,19 +330,27 @@ class DummyProgressBar:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # Dummy implementation - no cleanup needed for quiet mode
         pass
 
     def add_task(self, description: str, total: int = 100):
-        return DummyTask()
+        return DummyTask(description, total)
 
     def update(self, task_id, advance: int = 1, **kwargs):
+        # Dummy implementation - no progress updates in quiet mode
         pass
 
 
 class DummyTask:
     """Dummy task for progress bar."""
 
-    pass
+    def __init__(self, description: str, total: int):
+        self.description = description
+        self.total = total
+        self.completed = 0
+        self.progress = 0
+        self.task = None
+        self.task_id = None
 
 
 class DummyStatus:
@@ -340,9 +360,11 @@ class DummyStatus:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # Dummy implementation - no cleanup needed for quiet mode
         pass
 
     def update(self, status: str):
+        # Dummy implementation - no cleanup needed for quiet mode
         pass
 
 

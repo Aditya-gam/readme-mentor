@@ -197,11 +197,10 @@ class RichFormatter(OutputFormatter):
         }
         return units.get(metric, "")
 
-    def create_progress_bar(self, total: int, description: str = "") -> Any:
+    def create_progress_bar(self, description: str = "") -> Any:
         """Create a Rich progress bar.
 
         Args:
-            total: Total number of items
             description: Progress bar description
 
         Returns:

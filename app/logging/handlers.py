@@ -167,7 +167,6 @@ class StructuredLogger(logging.Logger):
         performance_metrics: Optional[Dict[str, Any]] = None,
         extra_fields: Optional[Dict[str, Any]] = None,
         *args: Any,
-        **kwargs: Any,
     ) -> None:
         """Log a message with performance metrics and extra fields.
 
@@ -299,7 +298,7 @@ def setup_structured_logging(config: LoggingConfig) -> StructuredLogger:
     return logger
 
 
-def get_structured_logger(name: str = "readme-mentor") -> StructuredLogger:
+def get_structured_logger(name: str = "readme-mentor") -> logging.Logger:
     """Get a structured logger instance.
 
     Args:

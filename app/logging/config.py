@@ -157,6 +157,23 @@ def _parse_enum_value(enum_class: type, value: str) -> Any:
         return list(enum_class)[0]
 
 
+def _parse_bool_env(key: str) -> Optional[bool]:
+    """Parse boolean environment variable."""
+    if key in os.environ:
+        return os.environ[key].lower() == "true"
+    return None
+
+
+def _parse_int_env(key: str) -> Optional[int]:
+    """Parse integer environment variable."""
+    if key in os.environ:
+        try:
+            return int(os.environ[key])
+        except ValueError:
+            pass
+    return None
+
+
 def _load_from_env() -> Dict[str, Any]:
     """Load configuration from environment variables."""
     config = {}
@@ -179,50 +196,31 @@ def _load_from_env() -> Dict[str, Any]:
         config["log_color"] = _parse_enum_value(ColorMode, os.environ["LOG_COLOR"])
 
     # Performance metrics
-    if "SHOW_PERFORMANCE_METRICS" in os.environ:
-        config["show_performance_metrics"] = (
-            os.environ["SHOW_PERFORMANCE_METRICS"].lower() == "true"
-        )
-
-    if "TRACK_TOOL_CALLS" in os.environ:
-        config["track_tool_calls"] = os.environ["TRACK_TOOL_CALLS"].lower() == "true"
-
-    if "TRACK_TOKEN_COUNTS" in os.environ:
-        config["track_token_counts"] = (
-            os.environ["TRACK_TOKEN_COUNTS"].lower() == "true"
-        )
-
-    if "TRACK_WALL_TIME" in os.environ:
-        config["track_wall_time"] = os.environ["TRACK_WALL_TIME"].lower() == "true"
+    for key in [
+        "SHOW_PERFORMANCE_METRICS",
+        "TRACK_TOOL_CALLS",
+        "TRACK_TOKEN_COUNTS",
+        "TRACK_WALL_TIME",
+    ]:
+        value = _parse_bool_env(key)
+        if value is not None:
+            config[key.lower()] = value
 
     # Error handling
-    if "SHOW_STACK_TRACES" in os.environ:
-        config["show_stack_traces"] = os.environ["SHOW_STACK_TRACES"].lower() == "true"
+    for key in ["SHOW_STACK_TRACES", "SHOW_ACTIONABLE_SUGGESTIONS"]:
+        value = _parse_bool_env(key)
+        if value is not None:
+            config[key.lower()] = value
 
-    if "SHOW_ACTIONABLE_SUGGESTIONS" in os.environ:
-        config["show_actionable_suggestions"] = (
-            os.environ["SHOW_ACTIONABLE_SUGGESTIONS"].lower() == "true"
-        )
-
-    if "ERROR_CONTEXT_LINES" in os.environ:
-        try:
-            config["error_context_lines"] = int(os.environ["ERROR_CONTEXT_LINES"])
-        except ValueError:
-            pass
+    error_context = _parse_int_env("ERROR_CONTEXT_LINES")
+    if error_context is not None:
+        config["error_context_lines"] = error_context
 
     # Rich UI settings
-    if "SHOW_PROGRESS_BARS" in os.environ:
-        config["show_progress_bars"] = (
-            os.environ["SHOW_PROGRESS_BARS"].lower() == "true"
-        )
-
-    if "SHOW_STATUS_INDICATORS" in os.environ:
-        config["show_status_indicators"] = (
-            os.environ["SHOW_STATUS_INDICATORS"].lower() == "true"
-        )
-
-    if "SHOW_SPINNERS" in os.environ:
-        config["show_spinners"] = os.environ["SHOW_SPINNERS"].lower() == "true"
+    for key in ["SHOW_PROGRESS_BARS", "SHOW_STATUS_INDICATORS", "SHOW_SPINNERS"]:
+        value = _parse_bool_env(key)
+        if value is not None:
+            config[key.lower()] = value
 
     return config
 
