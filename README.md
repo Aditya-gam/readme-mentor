@@ -44,9 +44,31 @@ README-Mentor is an AI-powered tool that ingests GitHub repositories and provide
 
 ### Basic Usage
 
-#### CLI Ingestion
+#### Simplified CLI (Recommended)
 
-Ingest a repository using the command-line interface:
+Use the new simplified CLI for easy repository ingestion and Q&A:
+
+```bash
+# Basic ingestion (in-memory)
+readme-mentor ingest https://github.com/octocat/Hello-World
+
+# Save data for future use
+readme-mentor ingest https://github.com/octocat/Hello-World --save
+
+# Use faster settings for quick testing
+readme-mentor ingest https://github.com/octocat/Hello-World --fast
+
+# Custom file patterns
+readme-mentor ingest https://github.com/user/repo --files "*.md" "docs/**/*.md"
+
+# Start interactive Q&A session
+readme-mentor qa https://github.com/octocat/Hello-World
+readme-mentor qa --repo-id octocat_Hello-World
+```
+
+#### Legacy CLI
+
+For advanced users who need fine-grained control:
 
 ```bash
 # Basic ingestion
@@ -100,7 +122,70 @@ EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 CHROMA_PERSIST_DIR=./data/chroma
 ```
 
-### CLI Options
+### Enhanced CLI Features
+
+The README-Mentor CLI provides a powerful and user-friendly interface with the following key features:
+
+#### Quick Start
+```bash
+# Simplest way to use README-Mentor
+readme-mentor qa https://github.com/octocat/Hello-World
+```
+
+This command will:
+1. Check if the repository has been ingested
+2. Automatically ingest it if not found
+3. Start an interactive Q&A session
+4. Allow you to ask questions about the repository
+
+#### Interactive Q&A Session
+During an interactive session, you can:
+- Ask questions about the repository
+- Use `history` to see previous exchanges
+- Use `clear` to clear chat history
+- Use `help` to show available commands
+- Use `quit`, `exit`, or `q` to end the session
+
+#### CLI Options
+
+| Command | Option | Description | Default |
+|---------|--------|-------------|---------|
+| `ingest` | `repo_url` | GitHub repository URL to ingest | Required |
+| `ingest` | `--save, -s` | Save data to disk for future use | In-memory only |
+| `ingest` | `--files, -f` | File patterns to process | `README*`, `docs/**/*.md` |
+| `ingest` | `--fast` | Use faster settings (smaller chunks) | Standard settings |
+| `ingest` | `--verbose, -v` | Show detailed progress information | False |
+| `qa` | `repo_url` | GitHub repository URL to load | Required (or `--repo-id`) |
+| `qa` | `--repo-id` | Repository ID (e.g., 'owner_repo') | Required (or `repo_url`) |
+| `qa` | `--no-save` | Don't save ingested data to disk | Save to disk |
+| `qa` | `--files, -f` | File patterns to process during ingestion | `README*`, `docs/**/*.md` |
+| `qa` | `--fast` | Use faster settings during ingestion | Standard settings |
+| `qa` | `--verbose, -v` | Show detailed progress information | False |
+| `qa` | `--clear-history` | Clear chat history at session start | Keep history |
+
+#### Usage Examples
+
+```bash
+# Quick start with auto-ingestion
+readme-mentor qa https://github.com/octocat/Hello-World
+
+# Fast processing with specific files
+readme-mentor qa https://github.com/user/repo --fast --files "*.md"
+
+# In-memory only session
+readme-mentor qa https://github.com/user/repo --no-save --verbose
+
+# Use pre-ingested repository
+readme-mentor qa --repo-id user_repo
+
+# Manual ingestion for later use
+readme-mentor ingest https://github.com/user/repo --save
+
+# Process specific file patterns
+readme-mentor ingest https://github.com/user/repo --files "*.md" "docs/**/*.md"
+```
+
+### Legacy CLI Options
 
 | Option | Description | Default |
 |--------|-------------|---------|

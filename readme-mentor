@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""
+README-Mentor CLI Wrapper
+
+This script allows you to run readme-mentor directly without poetry run.
+Make sure you're in the project directory and have run 'poetry install'.
+"""
+
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main():
+    """Run the readme-mentor CLI."""
+    # Check if we're in the right directory
+    if not Path("pyproject.toml").exists():
+        print("❌ Error: pyproject.toml not found. Make sure you're in the readme-mentor project directory.")
+        sys.exit(1)
+
+    # Check if poetry is available
+    try:
+        subprocess.run(["poetry", "--version"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("❌ Error: Poetry not found. Please install Poetry first.")
+        sys.exit(1)
+
+    # Run the CLI with poetry
+    try:
+        cmd = ["poetry", "run", "readme-mentor"] + sys.argv[1:]
+        subprocess.run(cmd)
+    except KeyboardInterrupt:
+        print("\n👋 Goodbye!")
+    except Exception as e:
+        print(f"❌ Error running readme-mentor: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
