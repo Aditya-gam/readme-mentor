@@ -12,16 +12,10 @@ from pathlib import Path
 from typing import List, Tuple
 
 from .embeddings.ingest import ingest_repository
+from .logging import UserOutput, setup_logging
 
 # Constants
 FULL_TRACEBACK_MSG = "Full traceback:"
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
 
 
 def parse_ingest_arguments() -> argparse.Namespace:
@@ -35,6 +29,7 @@ Examples:
   readme-mentor ingest https://github.com/user/repo --save
   readme-mentor ingest https://github.com/user/repo --files "*.md" "docs/**/*.md"
   readme-mentor ingest https://github.com/user/repo --fast
+  readme-mentor ingest https://github.com/user/repo --output-format json
         """,
     )
 
@@ -70,6 +65,20 @@ Examples:
         help="Show detailed progress information",
     )
 
+    parser.add_argument(
+        "--output-format",
+        choices=["rich", "plain", "json"],
+        default="rich",
+        help="Output format (default: rich)",
+    )
+
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress all output except errors",
+    )
+
     # Parse arguments starting from the third element (after script name and command)
     return parser.parse_args(sys.argv[2:])
 
@@ -85,6 +94,7 @@ Examples:
   readme-mentor qa --repo-id octocat_Hello-World
   readme-mentor qa https://github.com/user/repo --fast --files "*.md"
   readme-mentor qa https://github.com/user/repo --no-save --verbose
+  readme-mentor qa https://github.com/user/repo --output-format json
         """,
     )
 
@@ -100,24 +110,30 @@ Examples:
         help="Repository ID (e.g., 'owner_repo') - must be pre-ingested",
     )
 
-    # Ingestion options (only apply when repo_url is provided)
+    parser.add_argument(
+        "--save",
+        "-s",
+        action="store_true",
+        help="Save ingested data to disk (default: in-memory only)",
+    )
+
     parser.add_argument(
         "--no-save",
         action="store_true",
-        help="Don't save ingested data to disk (in-memory only)",
+        help="Force in-memory only (overrides --save)",
     )
 
     parser.add_argument(
         "--files",
         "-f",
         nargs="+",
-        help="File patterns to process during ingestion (default: README* and docs/**/*.md)",
+        help="File patterns to process (default: README* and docs/**/*.md)",
     )
 
     parser.add_argument(
         "--fast",
         action="store_true",
-        help="Use faster settings during ingestion (smaller chunks, faster model)",
+        help="Use faster settings (smaller chunks, faster model)",
     )
 
     parser.add_argument(
@@ -130,7 +146,21 @@ Examples:
     parser.add_argument(
         "--clear-history",
         action="store_true",
-        help="Clear chat history at the start of the session",
+        help="Clear chat history at start of session",
+    )
+
+    parser.add_argument(
+        "--output-format",
+        choices=["rich", "plain", "json"],
+        default="rich",
+        help="Output format (default: rich)",
+    )
+
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress all output except errors",
     )
 
     # Parse arguments starting from the third element (after script name and command)
@@ -138,58 +168,59 @@ Examples:
 
 
 def parse_arguments() -> argparse.Namespace:
-    """Parse main command line arguments."""
-    if len(sys.argv) < 2:
-        parser = argparse.ArgumentParser(
-            description="README-Mentor - AI-powered Q&A over repository documentation",
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            epilog="""
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="AI-powered README generation and mentoring tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
 Commands:
   ingest    Ingest a GitHub repository for Q&A
-  qa        Start interactive Q&A session (auto-ingests if needed)
+  qa        Start interactive Q&A session
 
-Examples:
-  readme-mentor ingest https://github.com/octocat/Hello-World
-  readme-mentor qa https://github.com/octocat/Hello-World
+For more help on a command:
+  readme-mentor <command> --help
         """,
-        )
-        parser.print_help()
-        sys.exit(1)
+    )
 
-    command = sys.argv[1]
+    parser.add_argument(
+        "command",
+        choices=["ingest", "qa"],
+        help="Command to run",
+    )
 
-    if command == "ingest":
-        return parse_ingest_arguments()
-    elif command == "qa":
-        return parse_qa_arguments()
-    else:
-        print(f"Unknown command: {command}")
-        print("Available commands: ingest, qa")
-        sys.exit(1)
+    # Parse arguments starting from the second element (after script name)
+    return parser.parse_args(sys.argv[1:2])
 
 
 def get_ingest_settings(args: argparse.Namespace) -> dict:
     """Get ingestion settings based on user preferences."""
+    settings = {}
+
     if args.fast:
-        return {
-            "chunk_size": 512,
-            "chunk_overlap": 64,
-            "batch_size": 32,
-            "embedding_model_name": "sentence-transformers/all-MiniLM-L6-v2",
-        }
-    else:
-        return {
-            "chunk_size": 1024,
-            "chunk_overlap": 128,
-            "batch_size": 64,
-            "embedding_model_name": "sentence-transformers/all-MiniLM-L6-v2",
-        }
+        settings.update(
+            {
+                "chunk_size": 500,
+                "chunk_overlap": 50,
+                "embedding_model_name": "all-MiniLM-L6-v2",  # Faster model
+            }
+        )
+
+    return settings
 
 
 def run_ingest(args: argparse.Namespace) -> int:
     """Run the ingest command."""
+    # Set up logging based on output format and verbosity
+    user_output_level = (
+        "QUIET" if args.quiet else ("DEBUG" if args.verbose else "NORMAL")
+    )
+    user_output, dev_logger = setup_logging(
+        user_output_level=user_output_level, output_format=args.output_format
+    )
+
     try:
-        print(f"🚀 Starting ingestion for: {args.repo_url}")
+        user_output.start_operation_timer("ingestion")
+        user_output.info("🚀 Starting ingestion", emoji="🚀")
 
         # Get settings based on user preferences
         settings = get_ingest_settings(args)
@@ -204,48 +235,81 @@ def run_ingest(args: argparse.Namespace) -> int:
             repo_slug = _extract_repo_slug(validated_url)
             persist_directory = f"data/{repo_slug}/chroma"
             Path(persist_directory).parent.mkdir(parents=True, exist_ok=True)
-            print(f"💾 Data will be saved to: {persist_directory}")
+            user_output.info("💾 Data will be saved", emoji="💾")
 
-        # Run ingestion
+        # Run ingestion with progress tracking
         vectorstore = ingest_repository(
             repo_url=args.repo_url,
             file_glob=tuple(args.files) if args.files else None,
             persist_directory=persist_directory,
+            user_output=user_output,
             **settings,
         )
 
+        # End timing and get duration
+        duration = user_output.end_operation_timer("ingestion")
+        user_output.add_performance_metric("ingestion_duration", duration)
+
+        # Get collection info for summary
+        collection_name = vectorstore._collection.name
+
+        # Count total files and chunks for summary
+        total_files = user_output._performance_metrics.get("total_files", 0)
+        total_chunks = user_output._performance_metrics.get("total_chunks", 0)
+
+        # Print comprehensive summary
+        user_output.print_ingestion_summary(
+            repo_url=args.repo_url,
+            total_files=total_files,
+            total_chunks=total_chunks,
+            duration=duration,
+            collection_name=collection_name,
+            persist_directory=persist_directory,
+        )
+
         # Success message
-        print("✅ Ingestion completed successfully!")
-        print(f"📚 Collection: {vectorstore._collection.name}")
+        user_output.success("✅ Ingestion completed successfully!", emoji="✅")
 
         if args.save:
-            print(f"💾 Data saved to: {persist_directory}")
-            print("💡 You can now use: readme-mentor qa --repo-id <repo_id>")
+            user_output.info("💡 You can now use: readme-mentor qa --repo-id <repo_id>")
         else:
-            print("💡 Use --save to persist data for future Q&A sessions")
+            user_output.info("💡 Use --save to persist data for future Q&A sessions")
+
+        # Display performance metrics
+        user_output.print_performance_metrics()
 
         return 0
 
     except KeyboardInterrupt:
-        print("\n❌ Ingestion interrupted by user")
+        user_output.error("❌ Ingestion interrupted by user", emoji="❌")
         return 1
     except Exception as e:
-        print(f"❌ Ingestion failed: {e}")
+        # Enhanced error handling with suggestions
+        suggestions = user_output.formatter._get_error_suggestions(e)
+        user_output.print_error_summary(
+            error=e, context="Repository ingestion", suggestions=suggestions
+        )
         if args.verbose:
-            logger.exception(FULL_TRACEBACK_MSG)
+            dev_logger.exception("Ingestion failed")
         return 1
 
 
 class ChatSession:
     """Manages an interactive chat session with history."""
 
-    def __init__(self, repo_id: str, clear_history: bool = False):
+    def __init__(
+        self, repo_id: str, clear_history: bool = False, user_output: UserOutput = None
+    ):
         self.repo_id = repo_id
         self.chat_history: List[Tuple[str, str]] = []
         self.session_start = datetime.now()
+        self.user_output = user_output
 
         if clear_history:
-            print("🗑️  Chat history cleared")
+            if user_output:
+                user_output.info("🗑️  Chat history cleared", emoji="🗑️")
+            else:
+                print("🗑️  Chat history cleared")
 
     def add_exchange(self, question: str, answer: str):
         """Add a question-answer exchange to the history."""
@@ -254,17 +318,36 @@ class ChatSession:
     def display_history(self):
         """Display the chat history in a formatted way."""
         if not self.chat_history:
-            print("💬 No previous messages in this session")
+            if self.user_output:
+                self.user_output.info(
+                    "💬 No previous messages in this session", emoji="💬"
+                )
+            else:
+                print("💬 No previous messages in this session")
             return
 
-        print(f"\n📜 Chat History ({len(self.chat_history)} exchanges):")
-        print("=" * 60)
+        if self.user_output:
+            self.user_output.info(
+                f"📜 Chat History ({len(self.chat_history)} exchanges)", emoji="📜"
+            )
+            self.user_output.print_separator("=", 60)
 
-        for i, (question, answer) in enumerate(self.chat_history, 1):
-            print(f"\n💬 Exchange {i}:")
-            print(f"❓ Q: {question}")
-            print(f"🤖 A: {answer[:200]}{'...' if len(answer) > 200 else ''}")
-            print("-" * 40)
+            for i, (question, answer) in enumerate(self.chat_history, 1):
+                self.user_output.info(f"💬 Exchange {i}:", emoji="💬")
+                self.user_output.info(f"❓ Q: {question}")
+                self.user_output.info(
+                    f"🤖 A: {answer[:200]}{'...' if len(answer) > 200 else ''}"
+                )
+                self.user_output.print_separator("-", 40)
+        else:
+            print(f"\n📜 Chat History ({len(self.chat_history)} exchanges):")
+            print("=" * 60)
+
+            for i, (question, answer) in enumerate(self.chat_history, 1):
+                print(f"\n💬 Exchange {i}:")
+                print(f"❓ Q: {question}")
+                print(f"🤖 A: {answer[:200]}{'...' if len(answer) > 200 else ''}")
+                print("-" * 40)
 
     def get_history_for_backend(self) -> List[Tuple[str, str]]:
         """Get the chat history in the format expected by the backend."""
@@ -286,139 +369,150 @@ def check_repository_exists(repo_id: str) -> bool:
         return False
 
 
-def auto_ingest_repository(repo_url: str, args: argparse.Namespace) -> str:
-    """Automatically ingest a repository and return the repo_id."""
-    print("🔍 Repository not found. Starting automatic ingestion...")
-
-    # Get settings based on user preferences
-    settings = get_ingest_settings(args)
-
-    # Set up persistence directory (always save for auto-ingestion)
+def auto_ingest_repository(
+    repo_url: str, args: argparse.Namespace, user_output: UserOutput
+) -> str:
+    """Automatically ingest a repository if it doesn't exist."""
     from .embeddings.ingest import _extract_repo_slug
     from .utils.validators import validate_repo_url
 
     validated_url = validate_repo_url(repo_url)
     repo_slug = _extract_repo_slug(validated_url)
 
-    persist_directory = None if args.no_save else f"data/{repo_slug}/chroma"
-    if persist_directory:
-        Path(persist_directory).parent.mkdir(parents=True, exist_ok=True)
-        print(f"💾 Data will be saved to: {persist_directory}")
+    if not check_repository_exists(repo_slug):
+        user_output.info("📥 Repository not found, auto-ingesting...", emoji="📥")
 
-    # Run ingestion
-    ingest_repository(
-        repo_url=repo_url,
-        file_glob=tuple(args.files) if args.files else None,
-        persist_directory=persist_directory,
-        **settings,
-    )
+        # Create ingest args for auto-ingestion
+        ingest_args = argparse.Namespace(
+            repo_url=validated_url,
+            save=args.save,
+            files=args.files,
+            fast=args.fast,
+            verbose=args.verbose,
+            output_format=args.output_format,
+            quiet=args.quiet,
+        )
 
-    print("✅ Auto-ingestion completed successfully!")
+        # Run ingestion
+        result = run_ingest(ingest_args)
+        if result != 0:
+            raise Exception("Auto-ingestion failed")
+
+        user_output.success("✅ Auto-ingestion completed!", emoji="✅")
+    else:
+        user_output.info("✅ Repository already ingested", emoji="✅")
+
     return repo_slug
 
 
 def _handle_special_commands(question: str, chat_session: ChatSession) -> bool:
-    """Handle special commands and return True if command was processed."""
-    if question.lower() in ["quit", "exit", "q"]:
-        print("👋 Goodbye!")
+    """Handle special commands in the chat session."""
+    question_lower = question.lower().strip()
+
+    if question_lower in ["quit", "exit", "q"]:
         return True
-    elif question.lower() == "history":
+    elif question_lower == "history":
         chat_session.display_history()
         return True
-    elif question.lower() == "clear":
+    elif question_lower == "clear":
         chat_session.chat_history.clear()
-        print("🗑️  Chat history cleared")
+        if chat_session.user_output:
+            chat_session.user_output.info("🗑️  Chat history cleared", emoji="🗑️")
+        else:
+            print("🗑️  Chat history cleared")
         return True
-    elif question.lower() == "help":
-        print("\n💡 Available commands:")
-        print("   - Type your question and press Enter")
-        print("   - Type 'history' to see previous exchanges")
-        print("   - Type 'clear' to clear chat history")
-        print("   - Type 'quit', 'exit', or 'q' to end session")
-        print("   - Type 'help' for this help message")
+    elif question_lower == "help":
+        _print_session_help()
         return True
+
     return False
 
 
 def _display_answer_with_metadata(result: dict, chat_session: ChatSession):
     """Display answer with citations and performance metrics."""
     answer = result["answer"]
-    print("\n🤖 Answer:")
-    print(f"{answer}")
+    citations = result.get("citations", [])
+    metadata = {
+        "latency_ms": result.get("latency_ms", 0),
+        "total_exchanges": len(chat_session.chat_history) + 1,
+    }
 
-    # Display citations if available
-    if result.get("citations"):
-        print(f"\n📖 Sources ({len(result['citations'])}):")
-        for i, citation in enumerate(result["citations"], 1):
-            file_path = citation.get("file", "Unknown")
-            start_line = citation.get("start_line", "?")
-            end_line = citation.get("end_line", "?")
-            print(f"  {i}. {file_path} (lines {start_line}-{end_line})")
+    if chat_session.user_output:
+        chat_session.user_output.print_qa_session(
+            question=chat_session.chat_history[-1][0]
+            if chat_session.chat_history
+            else "Unknown",
+            answer=answer,
+            citations=citations,
+            metadata=metadata,
+        )
+    else:
+        # Fallback to old format
+        print("\n🤖 Answer:")
+        print(f"{answer}")
 
-    # Display performance metrics
-    latency = result.get("latency_ms", 0)
-    print(f"\n⏱️  Response time: {latency:.0f}ms")
-    print(f"💬 Total exchanges in session: {len(chat_session.chat_history)}")
+        # Display citations if available
+        if citations:
+            print(f"\n📖 Sources ({len(citations)}):")
+            for i, citation in enumerate(citations, 1):
+                file_path = citation.get("file", "Unknown")
+                start_line = citation.get("start_line", "?")
+                end_line = citation.get("end_line", "?")
+                print(f"  {i}. {file_path} (lines {start_line}-{end_line})")
+
+        # Display performance metrics
+        latency = result.get("latency_ms", 0)
+        print(f"\n⏱️  Response time: {latency:.0f}ms")
+        print(f"💬 Total exchanges in session: {len(chat_session.chat_history)}")
 
 
 def _process_question(question: str, repo_id: str, chat_session: ChatSession):
-    """Process a single question and generate answer."""
-    print("🤔 Thinking...")
+    """Process a question and display the answer."""
+    from .rag.chain import generate_answer
 
-    # Generate answer using the backend with chat history
-    from .backend import generate_answer
-
-    result = generate_answer(
-        question, repo_id, history=chat_session.get_history_for_backend()
-    )
+    # Generate answer
+    result = generate_answer(question, repo_id, chat_session.get_history_for_backend())
 
     # Add to chat history
     chat_session.add_exchange(question, result["answer"])
 
-    # Display the answer with metadata
+    # Display answer
     _display_answer_with_metadata(result, chat_session)
 
 
-def _setup_repository(args: argparse.Namespace) -> str:
-    """Set up repository and return repo_id."""
+def _setup_repository(args: argparse.Namespace, user_output: UserOutput) -> str:
+    """Set up repository for Q&A session."""
     if args.repo_id:
-        print(f"📚 Loading pre-ingested repository: {args.repo_id}")
+        # Use existing repository
         if not check_repository_exists(args.repo_id):
-            print(f"❌ Repository '{args.repo_id}' not found or has no data")
-            print("💡 Try ingesting it first: readme-mentor ingest <repo_url> --save")
-            raise ValueError(f"Repository '{args.repo_id}' not found")
+            raise Exception(
+                f"Repository '{args.repo_id}' not found. Please ingest it first."
+            )
+        user_output.info(f"✅ Using existing repository: {args.repo_id}")
         return args.repo_id
-
-    elif args.repo_url:
-        from .embeddings.ingest import _extract_repo_slug
-        from .utils.validators import validate_repo_url
-
-        validated_url = validate_repo_url(args.repo_url)
-        repo_slug = _extract_repo_slug(validated_url)
-        repo_id = repo_slug
-
-        print(f"📚 Checking repository: {repo_id}")
-
-        # Check if repository exists, if not auto-ingest
-        if not check_repository_exists(repo_id):
-            repo_id = auto_ingest_repository(args.repo_url, args)
-        return repo_id
-
-    raise ValueError("No repository ID or URL provided")
+    else:
+        # Auto-ingest repository
+        return auto_ingest_repository(args.repo_url, args, user_output)
 
 
 def _print_session_help():
     """Print session help information."""
-    print("\n" + "=" * 60)
-    print("💬 Interactive Q&A Session Started")
-    print("=" * 60)
-    print("💡 Commands:")
-    print("   - Type your question and press Enter")
-    print("   - Type 'history' to see previous exchanges")
-    print("   - Type 'clear' to clear chat history")
-    print("   - Type 'quit', 'exit', or 'q' to end session")
-    print("   - Type 'help' for this help message")
-    print("=" * 60)
+    help_text = """
+🤖 README-Mentor Q&A Session Help
+================================
+
+Commands:
+   - Type 'history' to see previous exchanges
+   - Type 'clear' to clear chat history
+   - Type 'quit', 'exit', or 'q' to end session
+   - Type 'help' for this help message
+
+Tips:
+   - Ask specific questions about the repository
+   - Use natural language to describe what you want to know
+   - The AI will search through the repository content to find relevant information
+"""
+    print(help_text)
 
 
 def _run_interactive_loop(
@@ -442,70 +536,101 @@ def _run_interactive_loop(
             _process_question(question, repo_id, chat_session)
 
         except KeyboardInterrupt:
-            print("\n👋 Goodbye!")
+            if chat_session.user_output:
+                chat_session.user_output.info("👋 Goodbye!", emoji="👋")
+            else:
+                print("\n👋 Goodbye!")
             break
         except Exception as e:
-            print(f"❌ Error: {e}")
+            if chat_session.user_output:
+                chat_session.user_output.error("❌ Error processing question", error=e)
+            else:
+                print(f"❌ Error: {e}")
             if args.verbose:
-                logger.exception(FULL_TRACEBACK_MSG)
+                logging.getLogger().exception("Error in interactive loop")
 
 
-def _print_session_summary(chat_session: ChatSession, repo_id: str):
+def _print_session_summary(
+    chat_session: ChatSession, repo_id: str, user_output: UserOutput = None
+):
     """Print session summary."""
     session_duration = datetime.now() - chat_session.session_start
-    print("\n📊 Session Summary:")
-    print(f"   Duration: {session_duration}")
-    print(f"   Total exchanges: {len(chat_session.chat_history)}")
-    print(f"   Repository: {repo_id}")
+
+    if user_output:
+        user_output.info("📊 Session Summary", emoji="📊")
+        user_output.info(f"   Duration: {session_duration}")
+        user_output.info(f"   Total exchanges: {len(chat_session.chat_history)}")
+        user_output.info(f"   Repository: {repo_id}")
+    else:
+        print("\n📊 Session Summary:")
+        print(f"   Duration: {session_duration}")
+        print(f"   Total exchanges: {len(chat_session.chat_history)}")
+        print(f"   Repository: {repo_id}")
 
 
 def run_qa(args: argparse.Namespace) -> int:
     """Run the interactive Q&A command with enhanced features."""
+    # Set up logging based on output format and verbosity
+    user_output_level = (
+        "QUIET" if args.quiet else ("DEBUG" if args.verbose else "NORMAL")
+    )
+    user_output, dev_logger = setup_logging(
+        user_output_level=user_output_level, output_format=args.output_format
+    )
+
     try:
-        print("🤖 Starting enhanced interactive Q&A session...")
+        user_output.start_operation_timer("qa_session")
+        user_output.info("🤖 Starting enhanced interactive Q&A session...", emoji="🤖")
 
         # Set up repository
-        repo_id = _setup_repository(args)
-        print(f"✅ Repository ready: {repo_id}")
+        repo_id = _setup_repository(args, user_output)
+        user_output.success(f"✅ Repository ready: {repo_id}", emoji="✅")
 
         # Initialize chat session
-        chat_session = ChatSession(repo_id, args.clear_history)
+        chat_session = ChatSession(repo_id, args.clear_history, user_output)
         _print_session_help()
 
         # Run interactive loop
         _run_interactive_loop(repo_id, chat_session, args)
 
+        # End timing and get duration
+        duration = user_output.end_operation_timer("qa_session")
+        user_output.add_performance_metric("qa_session_duration", duration)
+
         # Print session summary
-        _print_session_summary(chat_session, repo_id)
+        _print_session_summary(chat_session, repo_id, user_output)
+
+        # Display performance metrics
+        user_output.print_performance_metrics()
 
         return 0
 
     except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+        user_output.info("👋 Goodbye!", emoji="👋")
         return 0
     except Exception as e:
-        print(f"❌ Q&A session failed: {e}")
+        # Enhanced error handling with suggestions
+        suggestions = user_output.formatter._get_error_suggestions(e)
+        user_output.print_error_summary(
+            error=e, context="Interactive Q&A session", suggestions=suggestions
+        )
         if args.verbose:
-            logger.exception(FULL_TRACEBACK_MSG)
+            dev_logger.exception("Q&A session failed")
         return 1
 
 
 def main() -> int:
     """Main CLI entry point."""
-    args = parse_arguments()
-
-    # Set logging level
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-
     # Determine command from sys.argv
     command = sys.argv[1] if len(sys.argv) > 1 else None
 
     # Run the appropriate command
     if command == "ingest":
-        return run_ingest(args)
+        ingest_args = parse_ingest_arguments()
+        return run_ingest(ingest_args)
     elif command == "qa":
-        return run_qa(args)
+        qa_args = parse_qa_arguments()
+        return run_qa(qa_args)
     else:
         print(f"Unknown command: {command}")
         return 1

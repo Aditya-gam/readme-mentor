@@ -66,6 +66,66 @@ class OutputFormatter:
         """
         raise NotImplementedError
 
+    def format_qa_session(
+        self,
+        question: str,
+        answer: str,
+        citations: Optional[list] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Format a Q&A session.
+
+        Args:
+            question: User question
+            answer: AI answer
+            citations: Optional list of citations
+            metadata: Optional metadata
+
+        Returns:
+            Formatted Q&A session string
+        """
+        raise NotImplementedError
+
+    def format_progress_update(
+        self, operation: str, current: int, total: int, description: str = ""
+    ) -> str:
+        """Format a progress update.
+
+        Args:
+            operation: Operation name
+            current: Current progress
+            total: Total items
+            description: Optional description
+
+        Returns:
+            Formatted progress update string
+        """
+        raise NotImplementedError
+
+    def format_ingestion_summary(
+        self,
+        repo_url: str,
+        total_files: int,
+        total_chunks: int,
+        duration: float,
+        collection_name: str,
+        persist_directory: Optional[str] = None,
+    ) -> str:
+        """Format an ingestion summary.
+
+        Args:
+            repo_url: Repository URL that was ingested
+            total_files: Number of files processed
+            total_chunks: Number of chunks created
+            duration: Ingestion duration in seconds
+            collection_name: ChromaDB collection name
+            persist_directory: Optional persistence directory
+
+        Returns:
+            Formatted ingestion summary string
+        """
+        raise NotImplementedError
+
 
 class RichFormatter(OutputFormatter):
     """Rich-based formatter for beautiful user interfaces."""
@@ -114,7 +174,7 @@ class RichFormatter(OutputFormatter):
         return str(text)
 
     def format_error(self, error: Exception, context: Optional[str] = None) -> str:
-        """Format an error with Rich styling and context.
+        """Format an error using Rich styling.
 
         Args:
             error: Exception to format
@@ -124,28 +184,89 @@ class RichFormatter(OutputFormatter):
             Formatted error message
         """
         # Create error panel
-        error_text = Text(f"❌ {type(error).__name__}: {str(error)}", style="bold red")
+        error_text = f"[bold red]Error:[/bold red] {type(error).__name__}: {str(error)}"
 
         if context:
-            context_text = Text(f"\nContext: {context}", style="dim")
-            error_text += context_text
+            error_text += f"\n[dim]Context:[/dim] {context}"
 
         if self.config.show_stack_traces:
             import traceback
 
-            stack_trace = Text("\n\nStack Trace:", style="bold")
-            stack_trace += Text(f"\n{''.join(traceback.format_exc())}", style="dim red")
-            error_text += stack_trace
+            error_text += f"\n[dim]Stack Trace:[/dim]\n{traceback.format_exc()}"
 
-        # Create panel with error
-        panel = Panel(
-            error_text,
-            title="Error",
-            border_style="red",
-            padding=(1, 2),
-        )
+        # Create actionable suggestions
+        if self.config.show_actionable_suggestions:
+            suggestions = self._get_error_suggestions(error)
+            if suggestions:
+                error_text += "\n[bold yellow]Suggestions:[/bold yellow]\n"
+                for suggestion in suggestions:
+                    error_text += f"• {suggestion}\n"
 
-        return str(panel)
+        return error_text
+
+    def _get_error_suggestions(self, error: Exception) -> list:
+        """Get actionable suggestions for an error.
+
+        Args:
+            error: Exception to get suggestions for
+
+        Returns:
+            List of suggestion strings
+        """
+        suggestions = []
+        _ = type(error).__name__
+        error_message = str(error).lower()
+
+        if "network" in error_message or "connection" in error_message:
+            suggestions.extend(
+                [
+                    "Check your internet connection",
+                    "Verify the repository URL is accessible",
+                    "Try again in a few moments",
+                ]
+            )
+        elif "not found" in error_message or "404" in error_message:
+            suggestions.extend(
+                [
+                    "Verify the repository URL is correct",
+                    "Check if the repository is public",
+                    "Ensure you have access to the repository",
+                ]
+            )
+        elif "rate limit" in error_message:
+            suggestions.extend(
+                [
+                    "Wait a few minutes before trying again",
+                    "Check your GitHub API rate limits",
+                    "Consider using a GitHub token for higher limits",
+                ]
+            )
+        elif "authentication" in error_message or "unauthorized" in error_message:
+            suggestions.extend(
+                [
+                    "Check your GitHub credentials",
+                    "Verify your GitHub token is valid",
+                    "Ensure you have access to the repository",
+                ]
+            )
+        elif "validation" in error_message:
+            suggestions.extend(
+                [
+                    "Check the input format and requirements",
+                    "Verify all required fields are provided",
+                    "Ensure the data meets validation rules",
+                ]
+            )
+        elif "permission" in error_message or "access" in error_message:
+            suggestions.extend(
+                [
+                    "Check file and directory permissions",
+                    "Ensure you have write access to the target directory",
+                    "Try running with elevated privileges if needed",
+                ]
+            )
+
+        return suggestions
 
     def format_performance_metrics(self, metrics: Dict[str, Any]) -> str:
         """Format performance metrics as a Rich table.
@@ -179,6 +300,145 @@ class RichFormatter(OutputFormatter):
 
         return str(table)
 
+    def format_qa_session(
+        self,
+        question: str,
+        answer: str,
+        citations: Optional[list] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Format a Q&A session using Rich styling.
+
+        Args:
+            question: User question
+            answer: AI answer
+            citations: Optional list of citations
+            metadata: Optional metadata
+
+        Returns:
+            Formatted Q&A session string
+        """
+        # Create question panel
+        question_panel = Panel(
+            f"[bold blue]❓ Question:[/bold blue]\n{question}",
+            title="Question",
+            border_style="blue",
+        )
+
+        # Create answer panel
+        answer_panel = Panel(
+            f"[bold green]🤖 Answer:[/bold green]\n{answer}",
+            title="Answer",
+            border_style="green",
+        )
+
+        result = str(question_panel) + "\n" + str(answer_panel)
+
+        # Add citations table if available
+        if citations:
+            citation_table = Table(
+                title="📖 Sources", show_header=True, header_style="bold magenta"
+            )
+            citation_table.add_column("File", style="cyan")
+            citation_table.add_column("Lines", style="yellow")
+            citation_table.add_column("Content", style="white")
+
+            for citation in citations:
+                file_path = citation.get("file", "Unknown")
+                start_line = citation.get("start_line", "?")
+                end_line = citation.get("end_line", "?")
+                content = (
+                    citation.get("content", "")[:100] + "..."
+                    if len(citation.get("content", "")) > 100
+                    else citation.get("content", "")
+                )
+
+                citation_table.add_row(file_path, f"{start_line}-{end_line}", content)
+
+            result += "\n" + str(citation_table)
+
+        # Add metadata table if available
+        if metadata:
+            meta_table = Table(
+                title="📊 Metadata", show_header=True, header_style="bold cyan"
+            )
+            meta_table.add_column("Metric", style="cyan")
+            meta_table.add_column("Value", style="green")
+
+            for key, value in metadata.items():
+                meta_table.add_row(key.replace("_", " ").title(), str(value))
+
+            result += "\n" + str(meta_table)
+
+        return result
+
+    def format_progress_update(
+        self, operation: str, current: int, total: int, description: str = ""
+    ) -> str:
+        """Format a progress update using Rich styling.
+
+        Args:
+            operation: Operation name
+            current: Current progress
+            total: Total items
+            description: Optional description
+
+        Returns:
+            Formatted progress update string
+        """
+        percentage = (current / total * 100) if total > 0 else 0
+        progress_bar = "█" * int(percentage / 5) + "░" * (20 - int(percentage / 5))
+
+        text = f"[bold blue]{operation}[/bold blue]"
+        if description:
+            text += f": {description}"
+
+        text += f"\n[{progress_bar}] {current}/{total} ({percentage:.1f}%)"
+
+        return text
+
+    def format_ingestion_summary(
+        self,
+        repo_url: str,
+        total_files: int,
+        total_chunks: int,
+        duration: float,
+        collection_name: str,
+        persist_directory: Optional[str] = None,
+    ) -> str:
+        """Format an ingestion summary using Rich styling.
+
+        Args:
+            repo_url: Repository URL that was ingested
+            total_files: Number of files processed
+            total_chunks: Number of chunks created
+            duration: Ingestion duration in seconds
+            collection_name: ChromaDB collection name
+            persist_directory: Optional persistence directory
+
+        Returns:
+            Formatted ingestion summary string
+        """
+        summary_content = f"""
+[bold cyan]Repository:[/bold cyan] {repo_url}
+[bold green]Files Processed:[/bold green] {total_files}
+[bold yellow]Chunks Created:[/bold yellow] {total_chunks}
+[bold blue]Collection:[/bold blue] {collection_name}
+[bold magenta]Duration:[/bold magenta] {duration:.2f}s
+"""
+        if persist_directory:
+            summary_content += (
+                f"[bold green]Persisted to:[/bold green] {persist_directory}"
+            )
+
+        panel = Panel(
+            summary_content,
+            title="✅ Ingestion Summary",
+            border_style="green",
+            padding=(1, 2),
+        )
+        return str(panel)
+
     def _get_metric_unit(self, metric: str) -> str:
         """Get the unit for a metric.
 
@@ -194,6 +454,8 @@ class RichFormatter(OutputFormatter):
             "tool_calls": "calls",
             "memory_usage": "MB",
             "cpu_usage": "%",
+            "duration": "seconds",
+            "latency": "ms",
         }
         return units.get(metric, "")
 
@@ -212,6 +474,8 @@ class RichFormatter(OutputFormatter):
             SpinnerColumn,
             TaskProgressColumn,
             TextColumn,
+            TimeElapsedColumn,
+            TimeRemainingColumn,
         )
 
         return Progress(
@@ -219,6 +483,8 @@ class RichFormatter(OutputFormatter):
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
             console=self.console,
         )
 
@@ -285,7 +551,78 @@ class PlainFormatter(OutputFormatter):
             lines.append("Stack Trace:")
             lines.append(traceback.format_exc())
 
+        # Add actionable suggestions
+        if self.config.show_actionable_suggestions:
+            suggestions = self._get_error_suggestions(error)
+            if suggestions:
+                lines.append("Suggestions:")
+                for suggestion in suggestions:
+                    lines.append(f"  • {suggestion}")
+
         return "\n".join(lines)
+
+    def _get_error_suggestions(self, error: Exception) -> list:
+        """Get actionable suggestions for an error.
+
+        Args:
+            error: Exception to get suggestions for
+
+        Returns:
+            List of suggestion strings
+        """
+        suggestions = []
+        error_message = str(error).lower()
+
+        if "network" in error_message or "connection" in error_message:
+            suggestions.extend(
+                [
+                    "Check your internet connection",
+                    "Verify the repository URL is accessible",
+                    "Try again in a few moments",
+                ]
+            )
+        elif "not found" in error_message or "404" in error_message:
+            suggestions.extend(
+                [
+                    "Verify the repository URL is correct",
+                    "Check if the repository is public",
+                    "Ensure you have access to the repository",
+                ]
+            )
+        elif "rate limit" in error_message:
+            suggestions.extend(
+                [
+                    "Wait a few minutes before trying again",
+                    "Check your GitHub API rate limits",
+                    "Consider using a GitHub token for higher limits",
+                ]
+            )
+        elif "authentication" in error_message or "unauthorized" in error_message:
+            suggestions.extend(
+                [
+                    "Check your GitHub credentials",
+                    "Verify your GitHub token is valid",
+                    "Ensure you have access to the repository",
+                ]
+            )
+        elif "validation" in error_message:
+            suggestions.extend(
+                [
+                    "Check the input format and requirements",
+                    "Verify all required fields are provided",
+                    "Ensure the data meets validation rules",
+                ]
+            )
+        elif "permission" in error_message or "access" in error_message:
+            suggestions.extend(
+                [
+                    "Check file and directory permissions",
+                    "Ensure you have write access to the target directory",
+                    "Try running with elevated privileges if needed",
+                ]
+            )
+
+        return suggestions
 
     def format_performance_metrics(self, metrics: Dict[str, Any]) -> str:
         """Format performance metrics as plain text.
@@ -313,6 +650,98 @@ class PlainFormatter(OutputFormatter):
 
         return "\n".join(lines)
 
+    def format_qa_session(
+        self,
+        question: str,
+        answer: str,
+        citations: Optional[list] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Format a Q&A session as plain text.
+
+        Args:
+            question: User question
+            answer: AI answer
+            citations: Optional list of citations
+            metadata: Optional metadata
+
+        Returns:
+            Formatted Q&A session string
+        """
+        lines = ["❓ Question:", question, "", "🤖 Answer:", answer]
+
+        if citations:
+            lines.extend(["", "📖 Sources:"])
+            for i, citation in enumerate(citations, 1):
+                file_path = citation.get("file", "Unknown")
+                start_line = citation.get("start_line", "?")
+                end_line = citation.get("end_line", "?")
+                lines.append(f"  {i}. {file_path} (lines {start_line}-{end_line})")
+
+        if metadata:
+            lines.extend(["", "📊 Metadata:"])
+            for key, value in metadata.items():
+                lines.append(f"  {key.replace('_', ' ').title()}: {value}")
+
+        return "\n".join(lines)
+
+    def format_progress_update(
+        self, operation: str, current: int, total: int, description: str = ""
+    ) -> str:
+        """Format a progress update as plain text.
+
+        Args:
+            operation: Operation name
+            current: Current progress
+            total: Total items
+            description: Optional description
+
+        Returns:
+            Formatted progress update string
+        """
+        percentage = (current / total * 100) if total > 0 else 0
+        text = f"{operation}"
+        if description:
+            text += f": {description}"
+        text += f" - {current}/{total} ({percentage:.1f}%)"
+        return text
+
+    def format_ingestion_summary(
+        self,
+        repo_url: str,
+        total_files: int,
+        total_chunks: int,
+        duration: float,
+        collection_name: str,
+        persist_directory: Optional[str] = None,
+    ) -> str:
+        """Format an ingestion summary as plain text.
+
+        Args:
+            repo_url: Repository URL that was ingested
+            total_files: Number of files processed
+            total_chunks: Number of chunks created
+            duration: Ingestion duration in seconds
+            collection_name: ChromaDB collection name
+            persist_directory: Optional persistence directory
+
+        Returns:
+            Formatted ingestion summary string
+        """
+        lines = [
+            "✅ Ingestion Summary:",
+            f"  Repository: {repo_url}",
+            f"  Files Processed: {total_files}",
+            f"  Chunks Created: {total_chunks}",
+            f"  Collection: {collection_name}",
+            f"  Duration: {duration:.2f}s",
+        ]
+
+        if persist_directory:
+            lines.append(f"  Persisted to: {persist_directory}")
+
+        return "\n".join(lines)
+
     def _get_metric_unit(self, metric: str) -> str:
         """Get the unit for a metric.
 
@@ -328,6 +757,8 @@ class PlainFormatter(OutputFormatter):
             "tool_calls": "calls",
             "memory_usage": "MB",
             "cpu_usage": "%",
+            "duration": "seconds",
+            "latency": "ms",
         }
         return units.get(metric, "")
 
@@ -350,6 +781,7 @@ class JSONFormatter(OutputFormatter):
             "timestamp": datetime.now().isoformat(),
             "level": level.upper(),
             "message": message,
+            "type": "message",
             **kwargs,
         }
 
@@ -368,8 +800,10 @@ class JSONFormatter(OutputFormatter):
         data = {
             "timestamp": datetime.now().isoformat(),
             "level": "ERROR",
+            "type": "error",
             "error_type": type(error).__name__,
             "error_message": str(error),
+            "error_code": self._get_error_code(error),
         }
 
         if context:
@@ -380,7 +814,103 @@ class JSONFormatter(OutputFormatter):
 
             data["stack_trace"] = traceback.format_exc()
 
+        # Add actionable suggestions
+        if self.config.show_actionable_suggestions:
+            suggestions = self._get_error_suggestions(error)
+            if suggestions:
+                data["suggestions"] = suggestions
+
         return json.dumps(data, indent=2)
+
+    def _get_error_code(self, error: Exception) -> str:
+        """Get a standardized error code for an exception.
+
+        Args:
+            error: Exception to get code for
+
+        Returns:
+            Error code string
+        """
+        _ = type(error).__name__
+        error_message = str(error).lower()
+
+        if "network" in error_message or "connection" in error_message:
+            return "NETWORK_ERROR"
+        elif "not found" in error_message or "404" in error_message:
+            return "NOT_FOUND"
+        elif "rate limit" in error_message:
+            return "RATE_LIMIT"
+        elif "authentication" in error_message or "unauthorized" in error_message:
+            return "AUTH_ERROR"
+        elif "validation" in error_message:
+            return "VALIDATION_ERROR"
+        elif "permission" in error_message or "access" in error_message:
+            return "PERMISSION_ERROR"
+        else:
+            return "UNKNOWN_ERROR"
+
+    def _get_error_suggestions(self, error: Exception) -> list:
+        """Get actionable suggestions for an error.
+
+        Args:
+            error: Exception to get suggestions for
+
+        Returns:
+            List of suggestion strings
+        """
+        suggestions = []
+        error_message = str(error).lower()
+
+        if "network" in error_message or "connection" in error_message:
+            suggestions.extend(
+                [
+                    "Check your internet connection",
+                    "Verify the repository URL is accessible",
+                    "Try again in a few moments",
+                ]
+            )
+        elif "not found" in error_message or "404" in error_message:
+            suggestions.extend(
+                [
+                    "Verify the repository URL is correct",
+                    "Check if the repository is public",
+                    "Ensure you have access to the repository",
+                ]
+            )
+        elif "rate limit" in error_message:
+            suggestions.extend(
+                [
+                    "Wait a few minutes before trying again",
+                    "Check your GitHub API rate limits",
+                    "Consider using a GitHub token for higher limits",
+                ]
+            )
+        elif "authentication" in error_message or "unauthorized" in error_message:
+            suggestions.extend(
+                [
+                    "Check your GitHub credentials",
+                    "Verify your GitHub token is valid",
+                    "Ensure you have access to the repository",
+                ]
+            )
+        elif "validation" in error_message:
+            suggestions.extend(
+                [
+                    "Check the input format and requirements",
+                    "Verify all required fields are provided",
+                    "Ensure the data meets validation rules",
+                ]
+            )
+        elif "permission" in error_message or "access" in error_message:
+            suggestions.extend(
+                [
+                    "Check file and directory permissions",
+                    "Ensure you have write access to the target directory",
+                    "Try running with elevated privileges if needed",
+                ]
+            )
+
+        return suggestions
 
     def format_performance_metrics(self, metrics: Dict[str, Any]) -> str:
         """Format performance metrics as JSON.
@@ -399,6 +929,107 @@ class JSONFormatter(OutputFormatter):
             "type": "performance_metrics",
             "metrics": metrics,
         }
+
+        return json.dumps(data, indent=2)
+
+    def format_qa_session(
+        self,
+        question: str,
+        answer: str,
+        citations: Optional[list] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Format a Q&A session as JSON.
+
+        Args:
+            question: User question
+            answer: AI answer
+            citations: Optional list of citations
+            metadata: Optional metadata
+
+        Returns:
+            JSON formatted Q&A session
+        """
+        data = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "qa_session",
+            "question": question,
+            "answer": answer,
+        }
+
+        if citations:
+            data["citations"] = citations
+
+        if metadata:
+            data["metadata"] = metadata
+
+        return json.dumps(data, indent=2)
+
+    def format_progress_update(
+        self, operation: str, current: int, total: int, description: str = ""
+    ) -> str:
+        """Format a progress update as JSON.
+
+        Args:
+            operation: Operation name
+            current: Current progress
+            total: Total items
+            description: Optional description
+
+        Returns:
+            JSON formatted progress update
+        """
+        percentage = (current / total * 100) if total > 0 else 0
+
+        data = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "progress_update",
+            "operation": operation,
+            "current": current,
+            "total": total,
+            "percentage": round(percentage, 1),
+        }
+
+        if description:
+            data["description"] = description
+
+        return json.dumps(data, indent=2)
+
+    def format_ingestion_summary(
+        self,
+        repo_url: str,
+        total_files: int,
+        total_chunks: int,
+        duration: float,
+        collection_name: str,
+        persist_directory: Optional[str] = None,
+    ) -> str:
+        """Format an ingestion summary as JSON.
+
+        Args:
+            repo_url: Repository URL that was ingested
+            total_files: Number of files processed
+            total_chunks: Number of chunks created
+            duration: Ingestion duration in seconds
+            collection_name: ChromaDB collection name
+            persist_directory: Optional persistence directory
+
+        Returns:
+            JSON formatted ingestion summary
+        """
+        data = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "ingestion_summary",
+            "repository_url": repo_url,
+            "total_files": total_files,
+            "total_chunks": total_chunks,
+            "duration_seconds": round(duration, 2),
+            "collection_name": collection_name,
+            "status": "success",
+        }
+
+        if persist_directory:
+            data["persist_directory"] = persist_directory
 
         return json.dumps(data, indent=2)
 
@@ -472,10 +1103,12 @@ class LogFormatter:
         """
         units = {
             "wall_time": "s",
-            "token_count": "t",
-            "tool_calls": "c",
+            "token_count": "tokens",
+            "tool_calls": "calls",
             "memory_usage": "MB",
             "cpu_usage": "%",
+            "duration": "s",
+            "latency": "ms",
         }
         return units.get(metric, "")
 
