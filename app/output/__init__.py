@@ -10,10 +10,12 @@ from .formatters import (
     PerformanceFormatter,
     QAFormatter,
 )
+from .manager import OutputManager
 
 __all__ = [
     "IngestionFormatter",
     "QAFormatter",
     "PerformanceFormatter",
     "ErrorFormatter",
+    "OutputManager",
 ]

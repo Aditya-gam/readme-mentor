@@ -1,239 +1,346 @@
 #!/usr/bin/env python3
-"""Demo script showcasing enhanced output formats for readme-mentor.
+"""Demo script for enhanced output formats - Phase 2 Implementation.
 
-This script demonstrates the three output formats (Rich, Plain, JSON) with
-various operations including ingestion progress, Q&A sessions, performance
-metrics, and error handling.
+This script demonstrates all the enhanced output formatting features
+implemented in Phase 2, including:
+- Rich format with progress indicators, status messages, structured displays, and interactive elements
+- Plain text format with simple output, structured layout, error formatting, and performance display
+- JSON format with machine-readable data, metadata inclusion, error structure, and progress tracking
 """
 
+import json
 import sys
 import time
 from pathlib import Path
 
-from app.logging import setup_logging
-from app.output import (
-    ErrorFormatter,
-    IngestionFormatter,
-    PerformanceFormatter,
-    QAFormatter,
-)
+from app.logging.config import LoggingConfig
+from app.logging.enums import ColorMode, OutputFormat, VerbosityLevel
+from app.output import OutputManager
 
-# Add the app directory to the path
+# Add the app directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent / "app"))
 
 
-def demo_ingestion_progress(user_output):
-    """Demo ingestion progress with different formats."""
-    print("\n" + "=" * 60)
-    print("DEMO: Ingestion Progress")
-    print("=" * 60)
+def demo_rich_format():
+    """Demonstrate Rich format features."""
+    print("\n" + "=" * 80)
+    print("🎨 RICH FORMAT DEMONSTRATION")
+    print("=" * 80)
 
-    # Create formatter
-    ingestion_formatter = IngestionFormatter(user_output)
-
-    # Start ingestion
-    ingestion_formatter.start_ingestion(
-        "https://github.com/octocat/Hello-World",
-        {"chunk_size": 1024, "chunk_overlap": 128},
+    config = LoggingConfig(
+        output_format=OutputFormat.RICH,
+        user_output_level=VerbosityLevel.VERBOSE,
+        log_color=ColorMode.TRUE,
     )
 
-    # Simulate file processing
-    files = ["README.md", "docs/installation.md", "docs/api.md", "docs/examples.md"]
+    output = OutputManager(config)
 
-    for i, file in enumerate(files, 1):
-        ingestion_formatter.file_processing_progress(i, len(files), file)
-        time.sleep(0.5)  # Simulate processing delay
+    # Demo 1: Progress Indicators
+    print("\n📊 Progress Indicators Demo:")
+    output.start_operation("File Processing")
 
-    # Simulate embedding progress
-    for i in range(0, 50, 10):
-        ingestion_formatter.embedding_progress(i, 50)
-        time.sleep(0.2)
+    with output.progress_bar(total=10, description="Processing files") as progress:
+        for i in range(10):
+            time.sleep(0.2)  # Simulate work
+            progress.update(
+                0, completed=i + 1, description=f"Processing file_{i + 1}.md"
+            )
 
-    # Complete ingestion
-    ingestion_formatter.ingestion_complete(
-        "octocat_Hello-World_collection", 45.2, len(files), 156
+    output.end_operation(
+        "File Processing", {"files_processed": 10, "processing_rate": 5.0}
     )
 
+    # Demo 2: Status Messages
+    print("\n💬 Status Messages Demo:")
+    output.print_success("Repository ingested successfully!")
+    output.print_warning("Some files were skipped due to size limits")
+    output.print_info("Using enhanced embedding model")
+    output.print_error("Network timeout occurred", Exception("Connection timeout"))
 
-def demo_qa_session(user_output):
-    """Demo Q&A session with different formats."""
-    print("\n" + "=" * 60)
-    print("DEMO: Q&A Session")
-    print("=" * 60)
+    # Demo 3: Structured Display
+    print("\n📋 Structured Display Demo:")
 
-    # Create formatter
-    qa_formatter = QAFormatter(user_output)
+    # Performance metrics table
+    performance_data = [
+        {"metric": "Files Processed", "value": "150", "unit": "files"},
+        {"metric": "Chunks Created", "value": "1,250", "unit": "chunks"},
+        {"metric": "Processing Time", "value": "45.2", "unit": "seconds"},
+        {"metric": "Memory Usage", "value": "256", "unit": "MB"},
+        {"metric": "CPU Usage", "value": "85", "unit": "%"},
+    ]
+    output.print_table(performance_data, "Performance Metrics")
 
-    # Start session
-    qa_formatter.session_start("octocat_Hello-World")
+    # Demo 4: Interactive Elements
+    print("\n🔄 Interactive Elements Demo:")
 
-    # Receive question
-    question = "How do I install readme-mentor?"
-    qa_formatter.question_received(question)
+    with output.status_spinner("Loading repository data...", "dots"):
+        time.sleep(2)
 
-    # Generate answer
-    answer = """To install readme-mentor, you can use pip:
+    with output.live_spinner("Generating embeddings...", "line"):
+        time.sleep(2)
 
-1. Install from PyPI:
-   pip install readme-mentor
+    # Demo 5: Q&A Session
+    print("\n🤖 Q&A Session Demo:")
+    output.qa.session_start("demo-repo")
 
-2. Or install from source:
-   git clone https://github.com/user/readme-mentor
-   cd readme-mentor
-   pip install -e .
-
-The tool requires Python 3.11+ and will automatically install all dependencies."""
+    question = "How do I implement authentication in this project?"
+    answer = "You can implement authentication using JWT tokens. First, install the required dependencies..."
 
     citations = [
         {
-            "file": "README.md",
+            "file": "src/auth/jwt.py",
             "start_line": 15,
             "end_line": 25,
-            "content": "Installation instructions for readme-mentor...",
+            "content": "def create_jwt_token(user_id: str) -> str:",
+            "relevance": 0.95,
         },
         {
-            "file": "docs/installation.md",
-            "start_line": 5,
-            "end_line": 12,
-            "content": "Detailed installation guide with requirements...",
+            "file": "docs/authentication.md",
+            "start_line": 10,
+            "end_line": 20,
+            "content": "## JWT Authentication Setup",
+            "relevance": 0.88,
         },
     ]
 
-    metadata = {
-        "latency_ms": 1250,
-        "total_exchanges": 3,
-        "model_used": "gpt-4",
-        "confidence_score": 0.92,
-    }
+    metadata = {"response_time": 1.2, "token_count": 150, "confidence_score": 0.92}
 
-    qa_formatter.answer_generated(question, answer, citations, metadata)
+    output.qa.question_received(question)
+    output.qa.answer_generated(question, answer, citations, metadata)
 
-    # Session summary
-    qa_formatter.session_summary(120.5, 3, "octocat_Hello-World")
+    output.qa.session_summary(30.5, 5, "demo-repo")
 
 
-def demo_performance_summary(user_output):
-    """Demo performance summary with different formats."""
-    print("\n" + "=" * 60)
-    print("DEMO: Performance Summary")
-    print("=" * 60)
+def demo_plain_format():
+    """Demonstrate Plain text format features."""
+    print("\n" + "=" * 80)
+    print("📝 PLAIN TEXT FORMAT DEMONSTRATION")
+    print("=" * 80)
 
-    # Create formatter
-    perf_formatter = PerformanceFormatter(user_output)
+    config = LoggingConfig(
+        output_format=OutputFormat.PLAIN,
+        user_output_level=VerbosityLevel.VERBOSE,
+        log_color=ColorMode.FALSE,
+    )
 
-    # Start operation
-    perf_formatter.operation_start("ingestion")
+    output = OutputManager(config)
 
-    # Complete operation with metrics
-    additional_metrics = {
-        "total_files": 12,
-        "total_chunks": 156,
-        "embedding_model": "all-MiniLM-L6-v2",
-        "memory_usage": 245.8,
-        "cpu_usage": 15.3,
-    }
+    # Demo 1: Simple Output
+    print("\n📄 Simple Output Demo:")
+    output.print_info("Starting plain text demonstration")
+    output.print_success("Operation completed successfully")
+    output.print_warning("Some warnings occurred")
+    output.print_error("An error was encountered")
 
-    perf_formatter.operation_complete("ingestion", 45.2, additional_metrics)
+    # Demo 2: Structured Layout
+    print("\n📋 Structured Layout Demo:")
+    output.print_separator()
 
-    # Performance summary
+    # Table with structured layout
+    table_data = [
+        {"operation": "File Processing", "status": "Completed", "duration": "2.5s"},
+        {
+            "operation": "Embedding Generation",
+            "status": "Completed",
+            "duration": "15.2s",
+        },
+        {"operation": "Index Creation", "status": "Completed", "duration": "3.1s"},
+    ]
+    output.print_table(table_data, "Operation Summary")
+
+    # Demo 3: Error Formatting
+    print("\n❌ Error Formatting Demo:")
+    try:
+        raise ValueError("Invalid configuration parameter")
+    except Exception as e:
+        output.error.operation_error("Configuration Validation", e, "Loading settings")
+
+    # Demo 4: Performance Display
+    print("\n📊 Performance Display Demo:")
     metrics = {
-        "ingestion_duration": 45.2,
-        "total_files": 12,
-        "total_chunks": 156,
-        "embedding_model": "all-MiniLM-L6-v2",
-        "memory_usage": 245.8,
-        "cpu_usage": 15.3,
-        "qa_session": {
-            "total_questions": 5,
-            "avg_response_time": 1.2,
-            "total_tokens": 1250,
+        "processing": {
+            "files_processed": 150,
+            "chunks_created": 1250,
+            "processing_time": 45.2,
         },
+        "memory": {"peak_usage": 256, "average_usage": 180},
+        "performance": {"throughput": 3.3, "efficiency": 85.5},
+    }
+    output.performance.performance_summary(metrics)
+
+
+def demo_json_format():
+    """Demonstrate JSON format features."""
+    print("\n" + "=" * 80)
+    print("🔧 JSON FORMAT DEMONSTRATION")
+    print("=" * 80)
+
+    config = LoggingConfig(
+        output_format=OutputFormat.JSON,
+        user_output_level=VerbosityLevel.VERBOSE,
+        log_color=ColorMode.FALSE,
+    )
+
+    output = OutputManager(config)
+
+    # Demo 1: Machine-Readable Data
+    print("\n🤖 Machine-Readable Data Demo:")
+    output.start_operation("Data Processing")
+
+    # Simulate progress updates
+    for i in range(5):
+        progress_data = {
+            "current": i + 1,
+            "total": 5,
+            "percentage": ((i + 1) / 5) * 100,
+            "status": "processing",
+        }
+        print(
+            json.dumps(
+                {
+                    "timestamp": time.time(),
+                    "type": "progress_update",
+                    "data": progress_data,
+                }
+            )
+        )
+        time.sleep(0.5)
+
+    output.end_operation(
+        "Data Processing", {"items_processed": 1000, "processing_rate": 2000}
+    )
+
+    # Demo 2: Metadata Inclusion
+    print("\n📊 Metadata Inclusion Demo:")
+    metadata = {
+        "operation_type": "repository_ingestion",
+        "repository_url": "https://github.com/example/repo",
+        "branch": "main",
+        "commit_hash": "abc123def456",
+        "file_patterns": ["*.md", "docs/**/*"],
+        "excluded_patterns": ["*.log", "node_modules/**"],
+        "chunk_size": 1000,
+        "chunk_overlap": 200,
+        "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
     }
 
-    perf_formatter.performance_summary(metrics)
+    print(
+        json.dumps(
+            {
+                "timestamp": time.time(),
+                "type": "operation_metadata",
+                "metadata": metadata,
+            }
+        )
+    )
 
+    # Demo 3: Error Structure
+    print("\n❌ Error Structure Demo:")
+    try:
+        raise ConnectionError("Failed to connect to GitHub API")
+    except Exception as e:
+        output.error.network_error("https://api.github.com", e)
 
-def demo_error_handling(user_output):
-    """Demo error handling with different formats."""
-    print("\n" + "=" * 60)
-    print("DEMO: Error Handling")
-    print("=" * 60)
-
-    # Create formatter
-    error_formatter = ErrorFormatter(user_output)
-
-    # Simulate different types of errors
-    errors = [
-        (
-            "repository_validation",
-            ValueError("Invalid repository URL: https://invalid-url"),
-        ),
-        ("network_operation", ConnectionError("Failed to connect to GitHub API")),
-        ("repository_access", PermissionError("Access denied to repository")),
-        (
-            "repository_lookup",
-            FileNotFoundError("Repository not found: user/nonexistent-repo"),
-        ),
+    # Demo 4: Progress Tracking
+    print("\n📈 Progress Tracking Demo:")
+    progress_events = [
+        {
+            "type": "operation_start",
+            "operation": "file_scanning",
+            "timestamp": time.time(),
+        },
+        {"type": "progress_update", "current": 10, "total": 50, "percentage": 20},
+        {"type": "progress_update", "current": 25, "total": 50, "percentage": 50},
+        {"type": "progress_update", "current": 50, "total": 50, "percentage": 100},
+        {"type": "operation_complete", "operation": "file_scanning", "duration": 5.2},
     ]
 
-    for operation, error in errors:
-        error_formatter.operation_error(operation, error, f"Demo {operation}")
-        print()  # Add spacing between errors
+    for event in progress_events:
+        print(json.dumps(event))
 
 
-def demo_format_comparison():
-    """Demo all three output formats side by side."""
-    formats = [("Rich", "rich"), ("Plain", "plain"), ("JSON", "json")]
+def demo_integration():
+    """Demonstrate integration of all formats."""
+    print("\n" + "=" * 80)
+    print("🔗 INTEGRATION DEMONSTRATION")
+    print("=" * 80)
 
-    for format_name, output_format in formats:
-        print(f"\n{'=' * 80}")
-        print(f"OUTPUT FORMAT: {format_name.upper()}")
-        print(f"{'=' * 80}")
+    # Test all three formats with the same operation
+    formats = [
+        (OutputFormat.RICH, "Rich"),
+        (OutputFormat.PLAIN, "Plain"),
+        (OutputFormat.JSON, "JSON"),
+    ]
 
-        # Set up logging for this format
-        user_output, _ = setup_logging(output_format=output_format)
+    for output_format, format_name in formats:
+        print(f"\n--- {format_name} Format ---")
 
-        # Run all demos
-        demo_ingestion_progress(user_output)
-        demo_qa_session(user_output)
-        demo_performance_summary(user_output)
-        demo_error_handling(user_output)
+        config = LoggingConfig(
+            output_format=output_format,
+            user_output_level=VerbosityLevel.VERBOSE,
+            log_color=ColorMode.TRUE
+            if output_format == OutputFormat.RICH
+            else ColorMode.FALSE,
+        )
+
+        output = OutputManager(config)
+
+        # Simulate a complete ingestion workflow
+        output.start_operation("Repository Ingestion")
+
+        # File processing
+        with output.progress_bar(total=3, description="Processing files") as progress:
+            for i in range(3):
+                time.sleep(0.3)
+                progress.update(
+                    0, completed=i + 1, description=f"Processing file_{i + 1}.md"
+                )
+
+        # Add performance metrics
+        output.add_performance_metric("files_processed", 3)
+        output.add_performance_metric("chunks_created", 25)
+        output.add_performance_metric("processing_time", 1.5)
+
+        # Complete operation
+        output.end_operation(
+            "Repository Ingestion",
+            {
+                "files_processed": 3,
+                "chunks_created": 25,
+                "processing_time": 1.5,
+                "memory_usage": 45.2,
+            },
+        )
+
+        # Show performance summary
+        output.print_performance_summary()
 
 
 def main():
-    """Main demo function."""
-    print("🚀 README-Mentor Enhanced Output Formats Demo")
-    print("=" * 80)
-    print("This demo showcases the three output formats:")
-    print("• Rich: Beautiful, interactive terminal output with colors and formatting")
-    print("• Plain: Simple, clean text output suitable for scripts and automation")
-    print("• JSON: Structured, machine-readable output for integration")
-    print("=" * 80)
+    """Run all demonstrations."""
+    print("🚀 README-Mentor Enhanced Output Formats Demo - Phase 2")
+    print("This demo showcases the enhanced output formatting features")
+    print("implemented in Phase 2 of the README-Mentor project.")
 
-    if len(sys.argv) > 1:
-        # Demo specific format
-        format_arg = sys.argv[1].lower()
-        if format_arg not in ["rich", "plain", "json"]:
-            print(f"Unknown format: {format_arg}")
-            print("Available formats: rich, plain, json")
-            return 1
+    try:
+        # Run all demos
+        demo_rich_format()
+        demo_plain_format()
+        demo_json_format()
+        demo_integration()
 
-        print(f"\nDemoing {format_arg.upper()} format:")
-        user_output, _ = setup_logging(output_format=format_arg)
+        print("\n" + "=" * 80)
+        print("✅ All demonstrations completed successfully!")
+        print("=" * 80)
 
-        demo_ingestion_progress(user_output)
-        demo_qa_session(user_output)
-        demo_performance_summary(user_output)
-        demo_error_handling(user_output)
-    else:
-        # Demo all formats
-        demo_format_comparison()
+    except KeyboardInterrupt:
+        print("\n\n⚠️ Demo interrupted by user")
+    except Exception as e:
+        print(f"\n\n❌ Demo failed with error: {e}")
+        import traceback
 
-    print("\n" + "=" * 80)
-    print("✅ Demo completed!")
-    print("=" * 80)
-    return 0
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
