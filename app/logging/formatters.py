@@ -17,6 +17,53 @@ from rich.text import Text
 from .config import LoggingConfig
 from .enums import OutputFormat
 
+# Error suggestion constants
+NETWORK_ERROR_SUGGESTIONS = [
+    "Check your internet connection",
+    "Verify the repository URL is accessible",
+    "Try again in a few moments",
+]
+
+NOT_FOUND_ERROR_SUGGESTIONS = [
+    "Verify the repository URL is correct",
+    "Check if the repository is public",
+    "Ensure you have access to the repository",
+]
+
+RATE_LIMIT_ERROR_SUGGESTIONS = [
+    "Wait a few minutes before trying again",
+    "Check your GitHub API rate limits",
+    "Consider using a GitHub token for higher limits",
+]
+
+AUTH_ERROR_SUGGESTIONS = [
+    "Check your GitHub credentials",
+    "Verify your GitHub token is valid",
+    "Ensure you have access to the repository",
+]
+
+VALIDATION_ERROR_SUGGESTIONS = [
+    "Check the input format and requirements",
+    "Verify all required fields are provided",
+    "Ensure the data meets validation rules",
+]
+
+PERMISSION_ERROR_SUGGESTIONS = [
+    "Check file and directory permissions",
+    "Ensure you have write access to the target directory",
+    "Try running with elevated privileges if needed",
+]
+
+# Error message pattern constants
+ERROR_PATTERNS = {
+    "network": ["network", "connection"],
+    "not_found": ["not found", "404"],
+    "rate_limit": ["rate limit"],
+    "auth": ["authentication", "unauthorized"],
+    "validation": ["validation"],
+    "permission": ["permission", "access"],
+}
+
 
 class OutputFormatter:
     """Base class for output formatting."""
@@ -217,54 +264,18 @@ class RichFormatter(OutputFormatter):
         _ = type(error).__name__
         error_message = str(error).lower()
 
-        if "network" in error_message or "connection" in error_message:
-            suggestions.extend(
-                [
-                    "Check your internet connection",
-                    "Verify the repository URL is accessible",
-                    "Try again in a few moments",
-                ]
-            )
-        elif "not found" in error_message or "404" in error_message:
-            suggestions.extend(
-                [
-                    "Verify the repository URL is correct",
-                    "Check if the repository is public",
-                    "Ensure you have access to the repository",
-                ]
-            )
-        elif "rate limit" in error_message:
-            suggestions.extend(
-                [
-                    "Wait a few minutes before trying again",
-                    "Check your GitHub API rate limits",
-                    "Consider using a GitHub token for higher limits",
-                ]
-            )
-        elif "authentication" in error_message or "unauthorized" in error_message:
-            suggestions.extend(
-                [
-                    "Check your GitHub credentials",
-                    "Verify your GitHub token is valid",
-                    "Ensure you have access to the repository",
-                ]
-            )
-        elif "validation" in error_message:
-            suggestions.extend(
-                [
-                    "Check the input format and requirements",
-                    "Verify all required fields are provided",
-                    "Ensure the data meets validation rules",
-                ]
-            )
-        elif "permission" in error_message or "access" in error_message:
-            suggestions.extend(
-                [
-                    "Check file and directory permissions",
-                    "Ensure you have write access to the target directory",
-                    "Try running with elevated privileges if needed",
-                ]
-            )
+        if any(pattern in error_message for pattern in ERROR_PATTERNS["network"]):
+            suggestions.extend(NETWORK_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["not_found"]):
+            suggestions.extend(NOT_FOUND_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["rate_limit"]):
+            suggestions.extend(RATE_LIMIT_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["auth"]):
+            suggestions.extend(AUTH_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["validation"]):
+            suggestions.extend(VALIDATION_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["permission"]):
+            suggestions.extend(PERMISSION_ERROR_SUGGESTIONS)
 
         return suggestions
 
@@ -834,17 +845,17 @@ class JSONFormatter(OutputFormatter):
         _ = type(error).__name__
         error_message = str(error).lower()
 
-        if "network" in error_message or "connection" in error_message:
+        if any(pattern in error_message for pattern in ERROR_PATTERNS["network"]):
             return "NETWORK_ERROR"
-        elif "not found" in error_message or "404" in error_message:
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["not_found"]):
             return "NOT_FOUND"
-        elif "rate limit" in error_message:
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["rate_limit"]):
             return "RATE_LIMIT"
-        elif "authentication" in error_message or "unauthorized" in error_message:
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["auth"]):
             return "AUTH_ERROR"
-        elif "validation" in error_message:
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["validation"]):
             return "VALIDATION_ERROR"
-        elif "permission" in error_message or "access" in error_message:
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["permission"]):
             return "PERMISSION_ERROR"
         else:
             return "UNKNOWN_ERROR"
@@ -861,54 +872,18 @@ class JSONFormatter(OutputFormatter):
         suggestions = []
         error_message = str(error).lower()
 
-        if "network" in error_message or "connection" in error_message:
-            suggestions.extend(
-                [
-                    "Check your internet connection",
-                    "Verify the repository URL is accessible",
-                    "Try again in a few moments",
-                ]
-            )
-        elif "not found" in error_message or "404" in error_message:
-            suggestions.extend(
-                [
-                    "Verify the repository URL is correct",
-                    "Check if the repository is public",
-                    "Ensure you have access to the repository",
-                ]
-            )
-        elif "rate limit" in error_message:
-            suggestions.extend(
-                [
-                    "Wait a few minutes before trying again",
-                    "Check your GitHub API rate limits",
-                    "Consider using a GitHub token for higher limits",
-                ]
-            )
-        elif "authentication" in error_message or "unauthorized" in error_message:
-            suggestions.extend(
-                [
-                    "Check your GitHub credentials",
-                    "Verify your GitHub token is valid",
-                    "Ensure you have access to the repository",
-                ]
-            )
-        elif "validation" in error_message:
-            suggestions.extend(
-                [
-                    "Check the input format and requirements",
-                    "Verify all required fields are provided",
-                    "Ensure the data meets validation rules",
-                ]
-            )
-        elif "permission" in error_message or "access" in error_message:
-            suggestions.extend(
-                [
-                    "Check file and directory permissions",
-                    "Ensure you have write access to the target directory",
-                    "Try running with elevated privileges if needed",
-                ]
-            )
+        if any(pattern in error_message for pattern in ERROR_PATTERNS["network"]):
+            suggestions.extend(NETWORK_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["not_found"]):
+            suggestions.extend(NOT_FOUND_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["rate_limit"]):
+            suggestions.extend(RATE_LIMIT_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["auth"]):
+            suggestions.extend(AUTH_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["validation"]):
+            suggestions.extend(VALIDATION_ERROR_SUGGESTIONS)
+        elif any(pattern in error_message for pattern in ERROR_PATTERNS["permission"]):
+            suggestions.extend(PERMISSION_ERROR_SUGGESTIONS)
 
         return suggestions
 

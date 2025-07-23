@@ -379,6 +379,107 @@ class UserOutput:
         if not self.config.is_quiet():
             self.console.print()
 
+    def _print_rich_qa_session(
+        self,
+        question: str,
+        answer: str,
+        citations: Optional[List[Dict]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Print Q&A session in rich format."""
+        self.console.print(
+            Panel(
+                f"[bold blue]❓ Question:[/bold blue]\n{question}",
+                title="Question",
+                border_style="blue",
+            )
+        )
+
+        self.console.print(
+            Panel(
+                f"[bold green]🤖 Answer:[/bold green]\n{answer}",
+                title="Answer",
+                border_style="green",
+            )
+        )
+
+        if citations:
+            self._print_rich_citations(citations)
+
+        if metadata:
+            self._print_rich_metadata(metadata)
+
+    def _print_rich_citations(self, citations: List[Dict]) -> None:
+        """Print citations in rich table format."""
+        citation_table = Table(
+            title="📖 Sources", show_header=True, header_style="bold magenta"
+        )
+        citation_table.add_column("File", style="cyan")
+        citation_table.add_column("Lines", style="yellow")
+        citation_table.add_column("Content", style="white")
+
+        for citation in citations:
+            file_path = citation.get("file", "Unknown")
+            start_line = citation.get("start_line", "?")
+            end_line = citation.get("end_line", "?")
+            content = citation.get("content", "")
+            if len(content) > 100:
+                content = content[:100] + "..."
+
+            citation_table.add_row(file_path, f"{start_line}-{end_line}", content)
+
+        self.console.print(citation_table)
+
+    def _print_rich_metadata(self, metadata: Dict[str, Any]) -> None:
+        """Print metadata in rich table format."""
+        meta_table = Table(
+            title="📊 Metadata", show_header=True, header_style="bold cyan"
+        )
+        meta_table.add_column("Metric", style="cyan")
+        meta_table.add_column("Value", style="green")
+
+        for key, value in metadata.items():
+            meta_table.add_row(key.replace("_", " ").title(), str(value))
+
+        self.console.print(meta_table)
+
+    def _print_plain_qa_session(
+        self,
+        question: str,
+        answer: str,
+        citations: Optional[List[Dict]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Print Q&A session in plain text format."""
+        self.info("❓ Question:")
+        self.info(question)
+        self.info("")
+        self.info("🤖 Answer:")
+        self.info(answer)
+
+        if citations:
+            self._print_plain_citations(citations)
+
+        if metadata:
+            self._print_plain_metadata(metadata)
+
+    def _print_plain_citations(self, citations: List[Dict]) -> None:
+        """Print citations in plain text format."""
+        self.info("")
+        self.info("📖 Sources:")
+        for i, citation in enumerate(citations, 1):
+            file_path = citation.get("file", "Unknown")
+            start_line = citation.get("start_line", "?")
+            end_line = citation.get("end_line", "?")
+            self.info(f"  {i}. {file_path} (lines {start_line}-{end_line})")
+
+    def _print_plain_metadata(self, metadata: Dict[str, Any]) -> None:
+        """Print metadata in plain text format."""
+        self.info("")
+        self.info("📊 Metadata:")
+        for key, value in metadata.items():
+            self.info(f"  {key.replace('_', ' ').title()}: {value}")
+
     def print_qa_session(
         self,
         question: str,
@@ -395,80 +496,9 @@ class UserOutput:
             metadata: Optional metadata (latency, etc.)
         """
         if self.config.output_format == OutputFormat.RICH:
-            # Rich formatting with panels and tables
-            self.console.print(
-                Panel(
-                    f"[bold blue]❓ Question:[/bold blue]\n{question}",
-                    title="Question",
-                    border_style="blue",
-                )
-            )
-
-            self.console.print(
-                Panel(
-                    f"[bold green]🤖 Answer:[/bold green]\n{answer}",
-                    title="Answer",
-                    border_style="green",
-                )
-            )
-
-            if citations:
-                citation_table = Table(
-                    title="📖 Sources", show_header=True, header_style="bold magenta"
-                )
-                citation_table.add_column("File", style="cyan")
-                citation_table.add_column("Lines", style="yellow")
-                citation_table.add_column("Content", style="white")
-
-                for _i, citation in enumerate(citations, 1):
-                    file_path = citation.get("file", "Unknown")
-                    start_line = citation.get("start_line", "?")
-                    end_line = citation.get("end_line", "?")
-                    content = (
-                        citation.get("content", "")[:100] + "..."
-                        if len(citation.get("content", "")) > 100
-                        else citation.get("content", "")
-                    )
-
-                    citation_table.add_row(
-                        file_path, f"{start_line}-{end_line}", content
-                    )
-
-                self.console.print(citation_table)
-
-            if metadata:
-                meta_table = Table(
-                    title="📊 Metadata", show_header=True, header_style="bold cyan"
-                )
-                meta_table.add_column("Metric", style="cyan")
-                meta_table.add_column("Value", style="green")
-
-                for key, value in metadata.items():
-                    meta_table.add_row(key.replace("_", " ").title(), str(value))
-
-                self.console.print(meta_table)
+            self._print_rich_qa_session(question, answer, citations, metadata)
         else:
-            # Plain text formatting
-            self.info("❓ Question:")
-            self.info(question)
-            self.info("")
-            self.info("🤖 Answer:")
-            self.info(answer)
-
-            if citations:
-                self.info("")
-                self.info("📖 Sources:")
-                for _i, citation in enumerate(citations, 1):
-                    file_path = citation.get("file", "Unknown")
-                    start_line = citation.get("start_line", "?")
-                    end_line = citation.get("end_line", "?")
-                    self.info(f"  {_i}. {file_path} (lines {start_line}-{end_line})")
-
-            if metadata:
-                self.info("")
-                self.info("📊 Metadata:")
-                for key, value in metadata.items():
-                    self.info(f"  {key.replace('_', ' ').title()}: {value}")
+            self._print_plain_qa_session(question, answer, citations, metadata)
 
     def print_ingestion_summary(
         self,

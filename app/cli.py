@@ -16,6 +16,7 @@ from .logging import UserOutput, setup_logging
 
 # Constants
 FULL_TRACEBACK_MSG = "Full traceback:"
+CHAT_HISTORY_CLEARED_MSG = "🗑️  Chat history cleared"
 
 
 def parse_ingest_arguments() -> argparse.Namespace:
@@ -192,6 +193,16 @@ For more help on a command:
     return parser.parse_args(sys.argv[1:2])
 
 
+def get_user_output_level(args: argparse.Namespace) -> str:
+    """Get user output level based on verbosity flags."""
+    if args.quiet:
+        return "QUIET"
+    elif args.verbose:
+        return "DEBUG"
+    else:
+        return "NORMAL"
+
+
 def get_ingest_settings(args: argparse.Namespace) -> dict:
     """Get ingestion settings based on user preferences."""
     settings = {}
@@ -211,9 +222,7 @@ def get_ingest_settings(args: argparse.Namespace) -> dict:
 def run_ingest(args: argparse.Namespace) -> int:
     """Run the ingest command."""
     # Set up logging based on output format and verbosity
-    user_output_level = (
-        "QUIET" if args.quiet else ("DEBUG" if args.verbose else "NORMAL")
-    )
+    user_output_level = get_user_output_level(args)
     user_output, dev_logger = setup_logging(
         user_output_level=user_output_level, output_format=args.output_format
     )
@@ -307,9 +316,9 @@ class ChatSession:
 
         if clear_history:
             if user_output:
-                user_output.info("🗑️  Chat history cleared", emoji="🗑️")
+                user_output.info(CHAT_HISTORY_CLEARED_MSG, emoji="🗑️")
             else:
-                print("🗑️  Chat history cleared")
+                print(CHAT_HISTORY_CLEARED_MSG)
 
     def add_exchange(self, question: str, answer: str):
         """Add a question-answer exchange to the history."""
@@ -318,36 +327,48 @@ class ChatSession:
     def display_history(self):
         """Display the chat history in a formatted way."""
         if not self.chat_history:
-            if self.user_output:
-                self.user_output.info(
-                    "💬 No previous messages in this session", emoji="💬"
-                )
-            else:
-                print("💬 No previous messages in this session")
+            self._display_empty_history()
             return
 
         if self.user_output:
-            self.user_output.info(
-                f"📜 Chat History ({len(self.chat_history)} exchanges)", emoji="📜"
-            )
-            self.user_output.print_separator("=", 60)
-
-            for i, (question, answer) in enumerate(self.chat_history, 1):
-                self.user_output.info(f"💬 Exchange {i}:", emoji="💬")
-                self.user_output.info(f"❓ Q: {question}")
-                self.user_output.info(
-                    f"🤖 A: {answer[:200]}{'...' if len(answer) > 200 else ''}"
-                )
-                self.user_output.print_separator("-", 40)
+            self._display_rich_history()
         else:
-            print(f"\n📜 Chat History ({len(self.chat_history)} exchanges):")
-            print("=" * 60)
+            self._display_plain_history()
 
-            for i, (question, answer) in enumerate(self.chat_history, 1):
-                print(f"\n💬 Exchange {i}:")
-                print(f"❓ Q: {question}")
-                print(f"🤖 A: {answer[:200]}{'...' if len(answer) > 200 else ''}")
-                print("-" * 40)
+    def _display_empty_history(self):
+        """Display message when no history exists."""
+        if self.user_output:
+            self.user_output.info("💬 No previous messages in this session", emoji="💬")
+        else:
+            print("💬 No previous messages in this session")
+
+    def _display_rich_history(self):
+        """Display history using rich formatting."""
+        self.user_output.info(
+            f"📜 Chat History ({len(self.chat_history)} exchanges)", emoji="📜"
+        )
+        self.user_output.print_separator("=", 60)
+
+        for i, (question, answer) in enumerate(self.chat_history, 1):
+            self.user_output.info(f"💬 Exchange {i}:", emoji="💬")
+            self.user_output.info(f"❓ Q: {question}")
+            self.user_output.info(f"🤖 A: {self._truncate_answer(answer)}")
+            self.user_output.print_separator("-", 40)
+
+    def _display_plain_history(self):
+        """Display history using plain text formatting."""
+        print(f"\n📜 Chat History ({len(self.chat_history)} exchanges):")
+        print("=" * 60)
+
+        for i, (question, answer) in enumerate(self.chat_history, 1):
+            print(f"\n💬 Exchange {i}:")
+            print(f"❓ Q: {question}")
+            print(f"🤖 A: {self._truncate_answer(answer)}")
+            print("-" * 40)
+
+    def _truncate_answer(self, answer: str) -> str:
+        """Truncate answer to 200 characters with ellipsis if needed."""
+        return f"{answer[:200]}{'...' if len(answer) > 200 else ''}"
 
     def get_history_for_backend(self) -> List[Tuple[str, str]]:
         """Get the chat history in the format expected by the backend."""
@@ -396,7 +417,7 @@ def auto_ingest_repository(
         # Run ingestion
         result = run_ingest(ingest_args)
         if result != 0:
-            raise Exception("Auto-ingestion failed")
+            raise RuntimeError("Auto-ingestion failed")
 
         user_output.success("✅ Auto-ingestion completed!", emoji="✅")
     else:
@@ -417,9 +438,9 @@ def _handle_special_commands(question: str, chat_session: ChatSession) -> bool:
     elif question_lower == "clear":
         chat_session.chat_history.clear()
         if chat_session.user_output:
-            chat_session.user_output.info("🗑️  Chat history cleared", emoji="🗑️")
+            chat_session.user_output.info(CHAT_HISTORY_CLEARED_MSG, emoji="🗑️")
         else:
-            print("🗑️  Chat history cleared")
+            print(CHAT_HISTORY_CLEARED_MSG)
         return True
     elif question_lower == "help":
         _print_session_help()
@@ -485,7 +506,7 @@ def _setup_repository(args: argparse.Namespace, user_output: UserOutput) -> str:
     if args.repo_id:
         # Use existing repository
         if not check_repository_exists(args.repo_id):
-            raise Exception(
+            raise FileNotFoundError(
                 f"Repository '{args.repo_id}' not found. Please ingest it first."
             )
         user_output.info(f"✅ Using existing repository: {args.repo_id}")
@@ -523,11 +544,8 @@ def _run_interactive_loop(
         try:
             question = input("\n❓ Question: ").strip()
 
-            # Handle special commands
-            if _handle_special_commands(question, chat_session):
-                if question.lower() in ["quit", "exit", "q"]:
-                    break
-                continue
+            if _should_exit_loop(question, chat_session):
+                break
 
             if not question:
                 continue
@@ -536,18 +554,38 @@ def _run_interactive_loop(
             _process_question(question, repo_id, chat_session)
 
         except KeyboardInterrupt:
-            if chat_session.user_output:
-                chat_session.user_output.info("👋 Goodbye!", emoji="👋")
-            else:
-                print("\n👋 Goodbye!")
+            _handle_keyboard_interrupt(chat_session)
             break
         except Exception as e:
-            if chat_session.user_output:
-                chat_session.user_output.error("❌ Error processing question", error=e)
-            else:
-                print(f"❌ Error: {e}")
-            if args.verbose:
-                logging.getLogger().exception("Error in interactive loop")
+            _handle_processing_error(e, chat_session, args)
+
+
+def _should_exit_loop(question: str, chat_session: ChatSession) -> bool:
+    """Check if the loop should exit based on the question."""
+    if _handle_special_commands(question, chat_session):
+        return question.lower() in ["quit", "exit", "q"]
+    return False
+
+
+def _handle_keyboard_interrupt(chat_session: ChatSession):
+    """Handle keyboard interrupt gracefully."""
+    if chat_session.user_output:
+        chat_session.user_output.info("👋 Goodbye!", emoji="👋")
+    else:
+        print("\n👋 Goodbye!")
+
+
+def _handle_processing_error(
+    e: Exception, chat_session: ChatSession, args: argparse.Namespace
+):
+    """Handle errors during question processing."""
+    if chat_session.user_output:
+        chat_session.user_output.error("❌ Error processing question", error=e)
+    else:
+        print(f"❌ Error: {e}")
+
+    if args.verbose:
+        logging.getLogger().exception("Error in interactive loop")
 
 
 def _print_session_summary(
@@ -571,9 +609,7 @@ def _print_session_summary(
 def run_qa(args: argparse.Namespace) -> int:
     """Run the interactive Q&A command with enhanced features."""
     # Set up logging based on output format and verbosity
-    user_output_level = (
-        "QUIET" if args.quiet else ("DEBUG" if args.verbose else "NORMAL")
-    )
+    user_output_level = get_user_output_level(args)
     user_output, dev_logger = setup_logging(
         user_output_level=user_output_level, output_format=args.output_format
     )
