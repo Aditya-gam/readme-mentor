@@ -13,6 +13,9 @@ from typing import List, Tuple
 
 from .embeddings.ingest import ingest_repository
 
+# Constants
+FULL_TRACEBACK_MSG = "Full traceback:"
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -229,7 +232,7 @@ def run_ingest(args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"❌ Ingestion failed: {e}")
         if args.verbose:
-            logger.exception("Full traceback:")
+            logger.exception(FULL_TRACEBACK_MSG)
         return 1
 
 
@@ -419,8 +422,7 @@ def run_qa(args: argparse.Namespace) -> int:
                         file_path = citation.get("file", "Unknown")
                         start_line = citation.get("start_line", "?")
                         end_line = citation.get("end_line", "?")
-                        print(
-                            f"  {i}. {file_path} (lines {start_line}-{end_line})")
+                        print(f"  {i}. {file_path} (lines {start_line}-{end_line})")
 
                 # Display performance metrics
                 latency = result.get("latency_ms", 0)
@@ -435,7 +437,7 @@ def run_qa(args: argparse.Namespace) -> int:
             except Exception as e:
                 print(f"❌ Error: {e}")
                 if args.verbose:
-                    logger.exception("Full traceback:")
+                    logger.exception(FULL_TRACEBACK_MSG)
 
         # Session summary
         session_duration = datetime.now() - chat_session.session_start
@@ -452,7 +454,7 @@ def run_qa(args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"❌ Q&A session failed: {e}")
         if args.verbose:
-            logger.exception("Full traceback:")
+            logger.exception(FULL_TRACEBACK_MSG)
         return 1
 
 
