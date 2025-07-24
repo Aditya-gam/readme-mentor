@@ -113,6 +113,20 @@ class OutputFormatter:
         """
         raise NotImplementedError
 
+    def format_operation_summary(
+        self, operation_name: str, summary: Dict[str, Any]
+    ) -> str:
+        """Format an operation summary for display.
+
+        Args:
+            operation_name: Name of the operation
+            summary: Operation summary dictionary
+
+        Returns:
+            Formatted operation summary string
+        """
+        raise NotImplementedError
+
     def format_qa_session(
         self,
         question: str,
@@ -308,6 +322,52 @@ class RichFormatter(OutputFormatter):
             else:
                 unit = self._get_metric_unit(metric)
                 table.add_row(metric, str(value), unit)
+
+        return str(table)
+
+    def format_operation_summary(
+        self, operation_name: str, summary: Dict[str, Any]
+    ) -> str:
+        """Format an operation summary as a Rich table.
+
+        Args:
+            operation_name: Name of the operation
+            summary: Operation summary dictionary
+
+        Returns:
+            Formatted operation summary string
+        """
+        if not self.config.show_detailed_metrics:
+            return ""
+
+        table = Table(
+            title=f"📊 {operation_name} Summary",
+            show_header=True,
+            header_style="bold cyan",
+        )
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="yellow")
+
+        # Add standard metrics
+        duration = summary.get("duration", 0)
+        steps = summary.get("steps", [])
+        token_count = summary.get("token_count", 0)
+
+        table.add_row("Duration", f"{duration:.2f}s")
+        table.add_row("Steps", str(len(steps)))
+        table.add_row("Token Count", str(token_count))
+
+        # Add operation-specific metrics
+        for key, value in summary.items():
+            if key not in ["duration", "steps", "token_count"]:
+                table.add_row(key.replace("_", " ").title(), str(value))
+
+        # Add steps details if verbose
+        if self.config.show_operation_steps and steps:
+            table.add_row("", "")  # Empty row for spacing
+            table.add_row("Steps Details", "")
+            for i, step in enumerate(steps, 1):
+                table.add_row(f"  {i}.", step)
 
         return str(table)
 
@@ -661,6 +721,45 @@ class PlainFormatter(OutputFormatter):
 
         return "\n".join(lines)
 
+    def format_operation_summary(
+        self, operation_name: str, summary: Dict[str, Any]
+    ) -> str:
+        """Format an operation summary as plain text.
+
+        Args:
+            operation_name: Name of the operation
+            summary: Operation summary dictionary
+
+        Returns:
+            Formatted operation summary string
+        """
+        if not self.config.show_detailed_metrics:
+            return ""
+
+        lines = [f"📊 {operation_name} Summary:"]
+
+        # Add standard metrics
+        duration = summary.get("duration", 0)
+        steps = summary.get("steps", [])
+        token_count = summary.get("token_count", 0)
+
+        lines.append(f"  Duration: {duration:.2f}s")
+        lines.append(f"  Steps: {len(steps)}")
+        lines.append(f"  Token Count: {token_count}")
+
+        # Add operation-specific metrics
+        for key, value in summary.items():
+            if key not in ["duration", "steps", "token_count"]:
+                lines.append(f"  {key.replace('_', ' ').title()}: {value}")
+
+        # Add steps details if verbose
+        if self.config.show_operation_steps and steps:
+            lines.append("  Steps Details:")
+            for i, step in enumerate(steps, 1):
+                lines.append(f"    {i}. {step}")
+
+        return "\n".join(lines)
+
     def format_qa_session(
         self,
         question: str,
@@ -903,6 +1002,30 @@ class JSONFormatter(OutputFormatter):
             "timestamp": datetime.now().isoformat(),
             "type": "performance_metrics",
             "metrics": metrics,
+        }
+
+        return json.dumps(data, indent=2)
+
+    def format_operation_summary(
+        self, operation_name: str, summary: Dict[str, Any]
+    ) -> str:
+        """Format an operation summary as JSON.
+
+        Args:
+            operation_name: Name of the operation
+            summary: Operation summary dictionary
+
+        Returns:
+            JSON formatted operation summary
+        """
+        if not self.config.show_detailed_metrics:
+            return ""
+
+        data = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "operation_summary",
+            "operation_name": operation_name,
+            "summary": summary,
         }
 
         return json.dumps(data, indent=2)

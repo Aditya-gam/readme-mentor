@@ -382,84 +382,166 @@ def ingest_repository(
     persist_directory: Optional[str] = None,
     user_output=None,
 ) -> Chroma:
-    """Ingest a repository for vector search.
+    """
+    Ingest a GitHub repository for Q&A.
 
-    This function performs the complete ingestion pipeline:
-    1. Validates the repository URL
-    2. Fetches repository files
-    3. Cleans and chunks the content
-    4. Generates embeddings
-    5. Stores in ChromaDB vector store
+    This function processes repository content through text chunking,
+    embedding generation, and vector store storage.
 
     Args:
         repo_url: GitHub repository URL
-        file_glob: Glob patterns for files to process (default: README* and docs/**/*.md)
-        chunk_size: Size of each text chunk in characters
-        chunk_overlap: Overlap between chunks in characters
-        batch_size: Number of documents to process in embedding batches
-        embedding_model_name: Name of the sentence-transformers model to use
-        collection_name: Custom collection name for ChromaDB
-        persist_directory: Directory to persist ChromaDB data
-        user_output: Optional UserOutput instance for progress tracking
+        file_glob: File patterns to process (default: README* and docs/**/*.md)
+        chunk_size: Size of text chunks
+        chunk_overlap: Overlap between chunks
+        batch_size: Batch size for embedding generation
+        embedding_model_name: Name of the embedding model to use
+        collection_name: Optional collection name for the vector store
+        persist_directory: Optional directory to persist the vector store
+        user_output: UserOutput instance for progress tracking
 
     Returns:
-        ChromaDB vector store instance
+        Chroma vector store instance
 
     Raises:
-        InvalidRepoURLError: If the repository URL is invalid
+        ValueError: If the repository URL is invalid
         Exception: If ingestion fails
     """
+    # Start timing the entire operation
     start_time = time.time()
-    logger.info(f"Starting ingestion for repository: {repo_url}")
 
-    # Validate and prepare repository
-    validated_url, repo_slug = _validate_and_prepare_repo(repo_url)
+    if user_output:
+        user_output.start_operation_timer("ingestion")
+        user_output.step("Starting repository ingestion", "ingestion")
+        user_output.config_detail("repo_url", repo_url)
+        user_output.config_detail("chunk_size", chunk_size)
+        user_output.config_detail("chunk_overlap", chunk_overlap)
+        user_output.config_detail("embedding_model", embedding_model_name)
 
-    # Set default file patterns if not provided
-    if file_glob is None:
-        file_glob = ("README*", "docs/**/*.md")
+    try:
+        # Step 1: Validate and prepare repository
+        if user_output:
+            user_output.step(
+                "Validating repository URL and extracting metadata", "ingestion"
+            )
 
-    # Fetch and process files
-    file_paths = _fetch_repository_files(validated_url, file_glob, user_output)
-    all_documents, processed_files = _process_files_for_chunking(
-        file_paths, chunk_size, chunk_overlap, user_output
-    )
+        repo_slug, repo_name = _validate_and_prepare_repo(repo_url)
 
-    # Track metrics for user output
-    _track_processing_metrics(
-        user_output, processed_files, len(all_documents), chunk_size, chunk_overlap
-    )
+        if user_output:
+            user_output.detail(f"Repository slug: {repo_slug}")
+            user_output.detail(f"Repository name: {repo_name}")
 
-    # Initialize embedding model
-    embedding_model = _initialize_embedding_model(embedding_model_name, user_output)
+        # Step 2: Set up file patterns
+        if file_glob is None:
+            file_glob = ("README*", "docs/**/*.md")
 
-    # Generate embeddings
-    _ = _generate_embeddings_with_progress(
-        all_documents, embedding_model, batch_size, user_output
-    )
+        if user_output:
+            user_output.step(f"Using file patterns: {file_glob}", "ingestion")
 
-    # Create vector store
-    vectorstore = _create_vector_store(
-        all_documents,
-        embedding_model,
-        repo_slug,
-        collection_name,
-        persist_directory,
-        user_output,
-    )
+        # Step 3: Fetch repository files
+        if user_output:
+            user_output.step("Fetching repository files from GitHub", "ingestion")
 
-    # Log completion
-    duration = time.time() - start_time
-    _log_completion_metrics(
-        user_output,
-        duration,
-        embedding_model_name,
-        collection_name,
-        persist_directory,
-        len(all_documents),
-    )
+        file_paths = _fetch_repository_files(repo_url, file_glob, user_output)
 
-    return vectorstore
+        if user_output:
+            user_output.detail(f"Found {len(file_paths)} files to process")
+            if user_output.config.show_raw_data:
+                user_output.raw(file_paths, "File Paths")
+
+        # Step 4: Process files for chunking
+        if user_output:
+            user_output.step("Processing files and creating text chunks", "ingestion")
+
+        all_documents, total_chunks = _process_files_for_chunking(
+            file_paths, chunk_size, chunk_overlap, user_output
+        )
+
+        if user_output:
+            user_output.add_performance_metric("total_files", len(file_paths))
+            user_output.add_performance_metric("total_chunks", total_chunks)
+            user_output.detail(
+                f"Created {total_chunks} chunks from {len(file_paths)} files"
+            )
+
+        # Step 5: Initialize embedding model
+        if user_output:
+            user_output.step(
+                f"Initializing embedding model: {embedding_model_name}", "ingestion"
+            )
+
+        embedding_model = _initialize_embedding_model(embedding_model_name, user_output)
+
+        if user_output:
+            user_output.config_detail("embedding_model_loaded", True)
+
+        # Step 6: Generate embeddings
+        if user_output:
+            user_output.step("Generating embeddings for text chunks", "ingestion")
+
+        embeddings = _generate_embeddings_with_progress(
+            all_documents, embedding_model, batch_size, user_output
+        )
+
+        if user_output:
+            user_output.detail(f"Generated {len(embeddings)} embeddings")
+            if user_output.config.show_raw_data:
+                user_output.raw(
+                    f"Embedding dimensions: {len(embeddings[0]) if embeddings else 0}",
+                    "Embedding Info",
+                )
+
+        # Step 7: Create vector store
+        if user_output:
+            user_output.step("Creating and populating vector store", "ingestion")
+
+        vectorstore = _create_vector_store(
+            all_documents,
+            embedding_model,
+            repo_slug,
+            collection_name,
+            persist_directory,
+            user_output,
+        )
+
+        if user_output:
+            user_output.detail(
+                f"Vector store created with collection: {vectorstore._collection.name}"
+            )
+
+        # Step 8: Track completion metrics
+        duration = time.time() - start_time
+
+        if user_output:
+            user_output.end_operation_timer("ingestion")
+            _log_completion_metrics(
+                user_output,
+                duration,
+                embedding_model_name,
+                vectorstore._collection.name,
+                persist_directory,
+                len(all_documents),
+            )
+
+            # Log internal state if in debug mode
+            if user_output.config.show_internal_state:
+                internal_state = {
+                    "vectorstore_collection": vectorstore._collection.name,
+                    "total_documents": len(all_documents),
+                    "total_chunks": total_chunks,
+                    "embedding_dimensions": len(embeddings[0]) if embeddings else 0,
+                    "persist_directory": persist_directory,
+                }
+                user_output.internal_state(internal_state)
+
+        return vectorstore
+
+    except Exception as e:
+        if user_output:
+            user_output.error(
+                "Repository ingestion failed", error=e, context="ingest_repository"
+            )
+        logger.error(f"Ingestion failed for {repo_url}: {e}")
+        raise
 
 
 def _validate_and_prepare_repo(repo_url: str) -> tuple[str, str]:
@@ -479,19 +561,18 @@ def _validate_and_prepare_repo(repo_url: str) -> tuple[str, str]:
 def _fetch_repository_files(
     repo_url: str, file_glob: tuple[str, ...], user_output
 ) -> List[str]:
-    """Fetch repository files with progress tracking."""
+    """Fetch repository files from GitHub."""
     if user_output:
-        with user_output.status("📥 Fetching repository files...", spinner="dots"):
-            file_paths = fetch_repository_files(repo_url, file_glob)
-    else:
-        logger.info("Fetching repository files...")
-        file_paths = fetch_repository_files(repo_url, file_glob)
+        user_output.step(f"Fetching files matching patterns: {file_glob}", "ingestion")
 
-    if not file_paths:
-        logger.warning("No files found in repository")
-        raise ValueError("No files found in repository")
+    file_paths = fetch_repository_files(repo_url, file_glob)
 
-    logger.info(f"Found {len(file_paths)} files to process")
+    if user_output:
+        user_output.detail(f"Retrieved {len(file_paths)} files from GitHub")
+        if user_output.config.show_raw_data:
+            # Show first 10 to avoid spam
+            user_output.raw(file_paths[:10], "First 10 File Paths")
+
     return file_paths
 
 
@@ -499,69 +580,70 @@ def _process_files_for_chunking(
     file_paths: List[str], chunk_size: int, chunk_overlap: int, user_output
 ) -> tuple[List, int]:
     """Process files for chunking with progress tracking."""
-    if user_output:
-        all_documents, processed_files = _process_files_with_progress(
+    if user_output and user_output.config.show_detailed_progress:
+        return _process_files_with_progress(
             file_paths, chunk_size, chunk_overlap, user_output
         )
     else:
-        all_documents, processed_files = _process_files_simple(
-            file_paths, chunk_size, chunk_overlap
-        )
-
-    if not all_documents:
-        logger.warning("No documents created from files")
-        raise ValueError("No documents created from files")
-
-    logger.info(f"Created {len(all_documents)} total chunks")
-    return all_documents, processed_files
+        return _process_files_simple(file_paths, chunk_size, chunk_overlap)
 
 
 def _process_files_with_progress(
     file_paths: List[str], chunk_size: int, chunk_overlap: int, user_output
 ) -> tuple[List, int]:
-    """Process files with progress bar tracking."""
+    """Process files with detailed progress tracking."""
     all_documents = []
-    total_files = len(file_paths)
-    processed_files = 0
+    total_chunks = 0
 
-    with user_output.progress_bar(total_files, "📄 Processing files") as progress:
-        task = progress.add_task("Processing files", total=total_files)
+    with user_output.progress_bar(len(file_paths), "Processing files") as progress:
+        task = progress.add_task("Processing files", total=len(file_paths))
 
-        for _i, file_path_str in enumerate(file_paths):
-            file_path = Path(file_path_str)
-            if file_path.exists():
+        for i, file_path in enumerate(file_paths):
+            if user_output:
+                user_output.step(
+                    f"Processing file {i + 1}/{len(file_paths)}: {file_path}",
+                    "ingestion",
+                )
+
+            try:
                 documents = _process_file_for_chunking(
                     file_path, chunk_size, chunk_overlap
                 )
                 all_documents.extend(documents)
-                processed_files += 1
+                total_chunks += len(documents)
 
-                # Update progress
-                progress.update(task, advance=1)
-
-                if user_output.config.is_verbose():
-                    user_output.verbose(
-                        f"Processed {file_path.name}: {len(documents)} chunks"
+                if user_output:
+                    user_output.detail(
+                        f"Created {len(documents)} chunks from {file_path}"
                     )
 
-    return all_documents, processed_files
+                progress.update(task, advance=1)
+
+            except Exception as e:
+                if user_output:
+                    user_output.warning(f"Failed to process {file_path}: {e}")
+                logger.warning(f"Failed to process {file_path}: {e}")
+                progress.update(task, advance=1)
+
+    return all_documents, total_chunks
 
 
 def _process_files_simple(
     file_paths: List[str], chunk_size: int, chunk_overlap: int
 ) -> tuple[List, int]:
-    """Process files without progress tracking."""
+    """Process files without detailed progress tracking."""
     all_documents = []
-    processed_files = 0
+    total_chunks = 0
 
-    for file_path_str in file_paths:
-        file_path = Path(file_path_str)
-        if file_path.exists():
+    for file_path in file_paths:
+        try:
             documents = _process_file_for_chunking(file_path, chunk_size, chunk_overlap)
             all_documents.extend(documents)
-            processed_files += 1
+            total_chunks += len(documents)
+        except Exception as e:
+            logger.warning(f"Failed to process {file_path}: {e}")
 
-    return all_documents, processed_files
+    return all_documents, total_chunks
 
 
 def _track_processing_metrics(
@@ -573,22 +655,36 @@ def _track_processing_metrics(
 ):
     """Track processing metrics for user output."""
     if user_output:
-        user_output.add_performance_metric("total_files", processed_files)
+        user_output.add_performance_metric("processed_files", processed_files)
         user_output.add_performance_metric("total_chunks", total_chunks)
         user_output.add_performance_metric("chunk_size", chunk_size)
         user_output.add_performance_metric("chunk_overlap", chunk_overlap)
+
+        if user_output.config.show_detailed_metrics:
+            avg_chunks_per_file = (
+                total_chunks / processed_files if processed_files > 0 else 0
+            )
+            user_output.add_performance_metric(
+                "avg_chunks_per_file", avg_chunks_per_file
+            )
 
 
 def _initialize_embedding_model(
     embedding_model_name: str, user_output
 ) -> HuggingFaceEmbeddings:
-    """Initialize embedding model with progress tracking."""
+    """Initialize the embedding model."""
     if user_output:
-        with user_output.status("🤖 Initializing embedding model...", spinner="dots"):
-            return HuggingFaceEmbeddings(model_name=embedding_model_name)
-    else:
-        logger.info(f"Initializing embedding model: {embedding_model_name}")
-        return HuggingFaceEmbeddings(model_name=embedding_model_name)
+        user_output.step(
+            f"Loading embedding model: {embedding_model_name}", "ingestion"
+        )
+
+    embedding_model = get_embedding_model(embedding_model_name)
+
+    if user_output:
+        user_output.detail("Embedding model loaded successfully")
+        user_output.config_detail("embedding_model_name", embedding_model_name)
+
+    return embedding_model
 
 
 def _generate_embeddings_with_progress(
@@ -599,34 +695,21 @@ def _generate_embeddings_with_progress(
 ) -> List[List[float]]:
     """Generate embeddings with progress tracking."""
     if user_output:
-        with user_output.progress_bar(
-            len(all_documents), "🧠 Generating embeddings"
-        ) as progress:
-            task = progress.add_task("Generating embeddings", total=len(all_documents))
-
-            embeddings = []
-            for i in range(0, len(all_documents), batch_size):
-                batch = all_documents[i : i + batch_size]
-                batch_embeddings = _generate_embeddings_batch(
-                    batch, embedding_model, batch_size
-                )
-                embeddings.extend(batch_embeddings)
-
-                # Update progress
-                progress.update(task, advance=len(batch))
-    else:
-        logger.info("Generating embeddings...")
-        embeddings = _generate_embeddings_batch(
-            all_documents, embedding_model, batch_size
+        user_output.step(
+            f"Generating embeddings for {len(all_documents)} documents", "ingestion"
         )
+        user_output.config_detail("batch_size", batch_size)
 
-    if len(embeddings) != len(all_documents):
-        logger.error(
-            f"Embedding count mismatch: {len(embeddings)} vs {len(all_documents)}"
-        )
-        raise RuntimeError("Embedding generation failed")
+    embeddings = _generate_embeddings_batch(all_documents, embedding_model, batch_size)
 
-    logger.info(f"Generated embeddings for {len(embeddings)} chunks")
+    if user_output:
+        user_output.detail(f"Generated {len(embeddings)} embeddings")
+        if user_output.config.show_detailed_metrics:
+            user_output.add_performance_metric(
+                "embedding_dimensions", len(embeddings[0]) if embeddings else 0
+            )
+            user_output.add_performance_metric("total_embeddings", len(embeddings))
+
     return embeddings
 
 
@@ -638,25 +721,23 @@ def _create_vector_store(
     persist_directory: Optional[str],
     user_output,
 ) -> Chroma:
-    """Create vector store with progress tracking."""
+    """Create and populate the vector store."""
     if user_output:
-        with user_output.status("💾 Creating vector store...", spinner="dots"):
-            return _create_chroma_store(
-                all_documents,
-                embedding_model,
-                repo_slug,
-                collection_name,
-                persist_directory,
-            )
-    else:
-        logger.info("Creating vector store...")
-        return _create_chroma_store(
-            all_documents,
-            embedding_model,
-            repo_slug,
-            collection_name,
-            persist_directory,
+        user_output.step("Creating vector store and adding documents", "ingestion")
+        user_output.config_detail("collection_name", collection_name)
+        user_output.config_detail("persist_directory", persist_directory)
+
+    vectorstore = _create_chroma_store(
+        all_documents, embedding_model, repo_slug, collection_name, persist_directory
+    )
+
+    if user_output:
+        user_output.detail(f"Vector store created with {len(all_documents)} documents")
+        user_output.config_detail(
+            "vectorstore_collection", vectorstore._collection.name
         )
+
+    return vectorstore
 
 
 def _create_chroma_store(
@@ -703,11 +784,14 @@ def _log_completion_metrics(
 ):
     """Log completion metrics."""
     if user_output:
-        user_output.add_performance_metric("ingestion_duration", duration)
-        user_output.add_performance_metric("embedding_model", embedding_model_name)
+        user_output.add_performance_metric("total_duration", duration)
+        user_output.add_performance_metric("embedding_model_used", embedding_model_name)
         user_output.add_performance_metric("collection_name", collection_name)
+        user_output.add_performance_metric("total_documents", total_documents)
 
-    logger.info(f"ChromaDB index built at {persist_directory}")
-    logger.info(f"Collection name: {collection_name}")
-    logger.info(f"Total documents stored: {total_documents}")
-    logger.info(f"Ingestion completed in {duration:.2f} seconds")
+        if persist_directory:
+            user_output.add_performance_metric("persist_directory", persist_directory)
+
+        if user_output.config.show_detailed_metrics:
+            docs_per_second = total_documents / duration if duration > 0 else 0
+            user_output.add_performance_metric("docs_per_second", docs_per_second)

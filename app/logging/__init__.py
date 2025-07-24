@@ -49,15 +49,23 @@ def setup_logging(
     if log_level:
         config.log_level = log_level
     if user_output_level:
-        config.user_output_level = user_output_level
+        # Convert string to VerbosityLevel enum
+        config.user_output_level = VerbosityLevel.from_string(user_output_level)
     if output_format:
         config.output_format = output_format
     if log_color:
         config.log_color = log_color
 
+    # Apply verbosity settings to ensure proper configuration
+    config._apply_verbosity_settings()
+
     # Initialize output channels
     user_output = UserOutput(config)
     developer_logger = DeveloperLogger(config)
+
+    # Set developer log level based on verbosity if not explicitly provided
+    if not log_level:
+        developer_logger.config.log_level = config.get_developer_log_level()
 
     return user_output, developer_logger
 

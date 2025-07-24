@@ -13,6 +13,7 @@ from typing import List, Tuple
 
 from .embeddings.ingest import ingest_repository
 from .logging import UserOutput, setup_logging
+from .logging.enums import VerbosityLevel
 
 # Constants
 FULL_TRACEBACK_MSG = "Full traceback:"
@@ -31,6 +32,8 @@ Examples:
   readme-mentor ingest https://github.com/user/repo --files "*.md" "docs/**/*.md"
   readme-mentor ingest https://github.com/user/repo --fast
   readme-mentor ingest https://github.com/user/repo --output-format json
+  readme-mentor ingest https://github.com/user/repo --verbosity 2
+  readme-mentor ingest https://github.com/user/repo --quiet
         """,
     )
 
@@ -59,11 +62,26 @@ Examples:
         help="Use faster settings (smaller chunks, faster model)",
     )
 
-    parser.add_argument(
+    # Enhanced verbosity options
+    verbosity_group = parser.add_mutually_exclusive_group()
+    verbosity_group.add_argument(
+        "--verbosity",
+        "-V",
+        type=int,
+        choices=[0, 1, 2, 3],
+        help="Verbosity level: 0=quiet, 1=normal, 2=verbose, 3=debug (default: 1)",
+    )
+    verbosity_group.add_argument(
         "--verbose",
         "-v",
         action="store_true",
-        help="Show detailed progress information",
+        help="Enable verbose output (equivalent to --verbosity 2)",
+    )
+    verbosity_group.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress all output except errors (equivalent to --verbosity 0)",
     )
 
     parser.add_argument(
@@ -71,13 +89,6 @@ Examples:
         choices=["rich", "plain", "json"],
         default="rich",
         help="Output format (default: rich)",
-    )
-
-    parser.add_argument(
-        "--quiet",
-        "-q",
-        action="store_true",
-        help="Suppress all output except errors",
     )
 
     # Parse arguments starting from the third element (after script name and command)
@@ -96,6 +107,8 @@ Examples:
   readme-mentor qa https://github.com/user/repo --fast --files "*.md"
   readme-mentor qa https://github.com/user/repo --no-save --verbose
   readme-mentor qa https://github.com/user/repo --output-format json
+  readme-mentor qa https://github.com/user/repo --verbosity 3
+  readme-mentor qa https://github.com/user/repo --quiet
         """,
     )
 
@@ -137,11 +150,26 @@ Examples:
         help="Use faster settings (smaller chunks, faster model)",
     )
 
-    parser.add_argument(
+    # Enhanced verbosity options
+    verbosity_group = parser.add_mutually_exclusive_group()
+    verbosity_group.add_argument(
+        "--verbosity",
+        "-V",
+        type=int,
+        choices=[0, 1, 2, 3],
+        help="Verbosity level: 0=quiet, 1=normal, 2=verbose, 3=debug (default: 1)",
+    )
+    verbosity_group.add_argument(
         "--verbose",
         "-v",
         action="store_true",
-        help="Show detailed progress information",
+        help="Enable verbose output (equivalent to --verbosity 2)",
+    )
+    verbosity_group.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress all output except errors (equivalent to --verbosity 0)",
     )
 
     parser.add_argument(
@@ -157,13 +185,6 @@ Examples:
         help="Output format (default: rich)",
     )
 
-    parser.add_argument(
-        "--quiet",
-        "-q",
-        action="store_true",
-        help="Suppress all output except errors",
-    )
-
     # Parse arguments starting from the third element (after script name and command)
     return parser.parse_args(sys.argv[2:])
 
@@ -177,6 +198,12 @@ def parse_arguments() -> argparse.Namespace:
 Commands:
   ingest    Ingest a GitHub repository for Q&A
   qa        Start interactive Q&A session
+
+Verbosity Levels:
+  0 (quiet)    Only critical errors and final results
+  1 (normal)   Success/failure status, basic metrics, progress indicators (default)
+  2 (verbose)  Detailed operation steps, extended metrics, configuration details
+  3 (debug)    All available information, raw data, internal state, full analysis
 
 For more help on a command:
   readme-mentor <command> --help
@@ -194,13 +221,26 @@ For more help on a command:
 
 
 def get_user_output_level(args: argparse.Namespace) -> str:
-    """Get user output level based on verbosity flags."""
-    if args.quiet:
-        return "QUIET"
-    elif args.verbose:
-        return "DEBUG"
-    else:
-        return "NORMAL"
+    """Get user output level based on verbosity flags.
+
+    Args:
+        args: Parsed command line arguments
+
+    Returns:
+        String representation of verbosity level
+    """
+    # Check for explicit verbosity level first
+    if hasattr(args, "verbosity") and args.verbosity is not None:
+        return VerbosityLevel(args.verbosity).to_string()
+
+    # Check for legacy flags
+    if hasattr(args, "quiet") and args.quiet:
+        return VerbosityLevel.QUIET.to_string()
+    elif hasattr(args, "verbose") and args.verbose:
+        return VerbosityLevel.VERBOSE.to_string()
+
+    # Default to normal level
+    return VerbosityLevel.NORMAL.to_string()
 
 
 def get_ingest_settings(args: argparse.Namespace) -> dict:
@@ -231,8 +271,20 @@ def run_ingest(args: argparse.Namespace) -> int:
         user_output.start_operation_timer("ingestion")
         user_output.info("🚀 Starting ingestion", emoji="🚀")
 
+        # Display configuration details if verbose
+        if user_output.config.show_configuration_details:
+            user_output.config_detail("Repository URL", args.repo_url)
+            user_output.config_detail("Save to disk", args.save)
+            user_output.config_detail("File patterns", args.files or "default")
+            user_output.config_detail("Fast mode", args.fast)
+
         # Get settings based on user preferences
         settings = get_ingest_settings(args)
+
+        # Display settings if verbose
+        if user_output.config.show_configuration_details:
+            for key, value in settings.items():
+                user_output.config_detail(f"Setting: {key}", value)
 
         # Set up persistence directory if requested
         persist_directory = None
@@ -246,7 +298,11 @@ def run_ingest(args: argparse.Namespace) -> int:
             Path(persist_directory).parent.mkdir(parents=True, exist_ok=True)
             user_output.info("💾 Data will be saved", emoji="💾")
 
+            if user_output.config.show_configuration_details:
+                user_output.config_detail("Persistence directory", persist_directory)
+
         # Run ingestion with progress tracking
+        user_output.step("Starting repository ingestion", operation="ingestion")
         vectorstore = ingest_repository(
             repo_url=args.repo_url,
             file_glob=tuple(args.files) if args.files else None,
@@ -279,6 +335,9 @@ def run_ingest(args: argparse.Namespace) -> int:
         # Success message
         user_output.success("✅ Ingestion completed successfully!", emoji="✅")
 
+        # Print operation summary if verbose
+        user_output.print_operation_summary("ingestion")
+
         if args.save:
             user_output.info("💡 You can now use: readme-mentor qa --repo-id <repo_id>")
         else:
@@ -298,7 +357,9 @@ def run_ingest(args: argparse.Namespace) -> int:
         user_output.print_error_summary(
             error=e, context="Repository ingestion", suggestions=suggestions
         )
-        if args.verbose:
+
+        # Log error details if verbose
+        if user_output.config.show_error_details:
             dev_logger.exception("Ingestion failed")
         return 1
 
@@ -410,8 +471,9 @@ def auto_ingest_repository(
             files=args.files,
             fast=args.fast,
             verbose=args.verbose,
+            verbosity=getattr(args, "verbosity", None),
+            quiet=getattr(args, "quiet", False),
             output_format=args.output_format,
-            quiet=args.quiet,
         )
 
         # Run ingestion
@@ -491,8 +553,27 @@ def _process_question(question: str, repo_id: str, chat_session: ChatSession):
     """Process a question and display the answer."""
     from .rag.chain import generate_answer
 
+    user_output = chat_session.user_output
+
+    # Start timing the question processing
+    if user_output:
+        user_output.start_operation_timer("question_processing")
+        user_output.step("Processing question", operation="question_processing")
+
     # Generate answer
     result = generate_answer(question, repo_id, chat_session.get_history_for_backend())
+
+    # Add performance metrics
+    if user_output:
+        latency = result.get("latency_ms", 0)
+        user_output.add_performance_metric("question_latency_ms", latency)
+        user_output.add_token_count("question_processing", result.get("token_count", 0))
+
+        # End timing
+        user_output.end_operation_timer("question_processing")
+
+        # Print operation summary if verbose
+        user_output.print_operation_summary("question_processing")
 
     # Add to chat history
     chat_session.add_exchange(question, result["answer"])
@@ -618,15 +699,27 @@ def run_qa(args: argparse.Namespace) -> int:
         user_output.start_operation_timer("qa_session")
         user_output.info("🤖 Starting enhanced interactive Q&A session...", emoji="🤖")
 
+        # Display configuration details if verbose
+        if user_output.config.show_configuration_details:
+            user_output.config_detail("Repository ID", getattr(args, "repo_id", "auto"))
+            user_output.config_detail(
+                "Repository URL", getattr(args, "repo_url", "none")
+            )
+            user_output.config_detail("Clear history", args.clear_history)
+            user_output.config_detail("Output format", args.output_format)
+
         # Set up repository
+        user_output.step("Setting up repository", operation="qa_session")
         repo_id = _setup_repository(args, user_output)
         user_output.success(f"✅ Repository ready: {repo_id}", emoji="✅")
 
         # Initialize chat session
+        user_output.step("Initializing chat session", operation="qa_session")
         chat_session = ChatSession(repo_id, args.clear_history, user_output)
         _print_session_help()
 
         # Run interactive loop
+        user_output.step("Starting interactive loop", operation="qa_session")
         _run_interactive_loop(repo_id, chat_session, args)
 
         # End timing and get duration
@@ -635,6 +728,9 @@ def run_qa(args: argparse.Namespace) -> int:
 
         # Print session summary
         _print_session_summary(chat_session, repo_id, user_output)
+
+        # Print operation summary if verbose
+        user_output.print_operation_summary("qa_session")
 
         # Display performance metrics
         user_output.print_performance_metrics()
@@ -650,7 +746,9 @@ def run_qa(args: argparse.Namespace) -> int:
         user_output.print_error_summary(
             error=e, context="Interactive Q&A session", suggestions=suggestions
         )
-        if args.verbose:
+
+        # Log error details if verbose
+        if user_output.config.show_error_details:
             dev_logger.exception("Q&A session failed")
         return 1
 
@@ -659,6 +757,183 @@ def main() -> int:
     """Main CLI entry point."""
     # Determine command from sys.argv
     command = sys.argv[1] if len(sys.argv) > 1 else None
+
+    # Check if this is a subcommand help request
+    if (
+        command in ["ingest", "qa"]
+        and len(sys.argv) > 2
+        and sys.argv[2] in ["--help", "-h"]
+    ):
+        if command == "ingest":
+            # Create a temporary parser to show help
+            parser = argparse.ArgumentParser(
+                description="Ingest a GitHub repository for Q&A",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                epilog="""
+Examples:
+  readme-mentor ingest https://github.com/octocat/Hello-World
+  readme-mentor ingest https://github.com/user/repo --save
+  readme-mentor ingest https://github.com/user/repo --files "*.md" "docs/**/*.md"
+  readme-mentor ingest https://github.com/user/repo --fast
+  readme-mentor ingest https://github.com/user/repo --output-format json
+  readme-mentor ingest https://github.com/user/repo --verbosity 2
+  readme-mentor ingest https://github.com/user/repo --quiet
+                """,
+            )
+            parser.add_argument("repo_url", help="GitHub repository URL to ingest")
+            parser.add_argument(
+                "--save",
+                "-s",
+                action="store_true",
+                help="Save data to disk for future use (default: in-memory only)",
+            )
+            parser.add_argument(
+                "--files",
+                "-f",
+                nargs="+",
+                help="File patterns to process (default: README* and docs/**/*.md)",
+            )
+            parser.add_argument(
+                "--fast",
+                action="store_true",
+                help="Use faster settings (smaller chunks, faster model)",
+            )
+            verbosity_group = parser.add_mutually_exclusive_group()
+            verbosity_group.add_argument(
+                "--verbosity",
+                "-V",
+                type=int,
+                choices=[0, 1, 2, 3],
+                help="Verbosity level: 0=quiet, 1=normal, 2=verbose, 3=debug (default: 1)",
+            )
+            verbosity_group.add_argument(
+                "--verbose",
+                "-v",
+                action="store_true",
+                help="Enable verbose output (equivalent to --verbosity 2)",
+            )
+            verbosity_group.add_argument(
+                "--quiet",
+                "-q",
+                action="store_true",
+                help="Suppress all output except errors (equivalent to --verbosity 0)",
+            )
+            parser.add_argument(
+                "--output-format",
+                choices=["rich", "plain", "json"],
+                default="rich",
+                help="Output format (default: rich)",
+            )
+            parser.print_help()
+        elif command == "qa":
+            # Create a temporary parser to show help
+            parser = argparse.ArgumentParser(
+                description="Start interactive Q&A session with automatic ingestion",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                epilog="""
+Examples:
+  readme-mentor qa https://github.com/octocat/Hello-World
+  readme-mentor qa --repo-id octocat_Hello-World
+  readme-mentor qa https://github.com/user/repo --fast --files "*.md"
+  readme-mentor qa https://github.com/user/repo --no-save --verbose
+  readme-mentor qa https://github.com/user/repo --output-format json
+  readme-mentor qa https://github.com/user/repo --verbosity 3
+  readme-mentor qa https://github.com/user/repo --quiet
+                """,
+            )
+            group = parser.add_mutually_exclusive_group(required=True)
+            group.add_argument(
+                "repo_url",
+                nargs="?",
+                help="GitHub repository URL to load (will auto-ingest if needed)",
+            )
+            group.add_argument(
+                "--repo-id", help="Repository ID for existing ingested repository"
+            )
+            parser.add_argument(
+                "--clear-history",
+                action="store_true",
+                help="Clear chat history at start",
+            )
+            parser.add_argument(
+                "--save",
+                "-s",
+                action="store_true",
+                help="Save data to disk for future use",
+            )
+            parser.add_argument(
+                "--no-save",
+                action="store_true",
+                help="Don't save data to disk (default)",
+            )
+            parser.add_argument(
+                "--files",
+                "-f",
+                nargs="+",
+                help="File patterns to process (default: README* and docs/**/*.md)",
+            )
+            parser.add_argument(
+                "--fast",
+                action="store_true",
+                help="Use faster settings (smaller chunks, faster model)",
+            )
+            verbosity_group = parser.add_mutually_exclusive_group()
+            verbosity_group.add_argument(
+                "--verbosity",
+                "-V",
+                type=int,
+                choices=[0, 1, 2, 3],
+                help="Verbosity level: 0=quiet, 1=normal, 2=verbose, 3=debug (default: 1)",
+            )
+            verbosity_group.add_argument(
+                "--verbose",
+                "-v",
+                action="store_true",
+                help="Enable verbose output (equivalent to --verbosity 2)",
+            )
+            verbosity_group.add_argument(
+                "--quiet",
+                "-q",
+                action="store_true",
+                help="Suppress all output except errors (equivalent to --verbosity 0)",
+            )
+            parser.add_argument(
+                "--output-format",
+                choices=["rich", "plain", "json"],
+                default="rich",
+                help="Output format (default: rich)",
+            )
+            parser.print_help()
+        return 0
+
+    # Check if help is requested for main command
+    if len(sys.argv) == 1 or "--help" in sys.argv or "-h" in sys.argv:
+        # Show main help
+        parser = argparse.ArgumentParser(
+            description="AI-powered README generation and mentoring tool",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog="""
+Commands:
+  ingest    Ingest a GitHub repository for Q&A
+  qa        Start interactive Q&A session
+
+Verbosity Levels:
+  0 (quiet)    Only critical errors and final results
+  1 (normal)   Success/failure status, basic metrics, progress indicators (default)
+  2 (verbose)  Detailed operation steps, extended metrics, configuration details
+  3 (debug)    All available information, raw data, internal state, full analysis
+
+For more help on a command:
+  readme-mentor <command> --help
+        """,
+        )
+        parser.add_argument(
+            "command",
+            choices=["ingest", "qa"],
+            help="Command to run",
+        )
+        parser.print_help()
+        return 0
 
     # Run the appropriate command
     if command == "ingest":
@@ -669,6 +944,7 @@ def main() -> int:
         return run_qa(qa_args)
     else:
         print(f"Unknown command: {command}")
+        print("Use --help for usage information")
         return 1
 
 

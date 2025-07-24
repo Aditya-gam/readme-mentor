@@ -18,6 +18,12 @@ class LoggingConfig:
     This class holds all configuration options for both user output
     and developer logging, with support for environment variable
     overrides and per-command customization.
+
+    Phase 3 implementation supports 4 verbosity levels (0-3):
+    - QUIET (0): Only critical errors and final results
+    - NORMAL (1): Default level with success/failure status and basic metrics
+    - VERBOSE (2): Detailed operation steps and extended metrics
+    - DEBUG (3): All available information including raw data and internal state
     """
 
     # Core logging settings
@@ -26,21 +32,31 @@ class LoggingConfig:
     output_format: OutputFormat = OutputFormat.RICH
     log_color: ColorMode = ColorMode.AUTO
 
-    # Performance metrics
+    # Performance metrics - controlled by verbosity level
     show_performance_metrics: bool = True
     track_tool_calls: bool = True
     track_token_counts: bool = True
     track_wall_time: bool = True
+    show_detailed_metrics: bool = False  # For verbose/debug levels
+    show_raw_metrics: bool = False  # For debug level only
 
     # Error handling
     show_stack_traces: bool = False
     show_actionable_suggestions: bool = True
     error_context_lines: int = 3
+    show_error_details: bool = False  # For verbose/debug levels
 
-    # Rich UI settings
+    # Rich UI settings - controlled by verbosity level
     show_progress_bars: bool = True
     show_status_indicators: bool = True
     show_spinners: bool = True
+    show_detailed_progress: bool = False  # For verbose/debug levels
+
+    # Verbosity-specific settings
+    show_operation_steps: bool = False  # For verbose/debug levels
+    show_configuration_details: bool = False  # For verbose/debug levels
+    show_internal_state: bool = False  # For debug level only
+    show_raw_data: bool = False  # For debug level only
 
     # Per-command overrides
     command_overrides: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -48,6 +64,7 @@ class LoggingConfig:
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
         self._validate_config()
+        self._apply_verbosity_settings()
 
     def _validate_config(self) -> None:
         """Validate configuration values."""
@@ -62,6 +79,75 @@ class LoggingConfig:
 
         if not isinstance(self.log_color, ColorMode):
             raise ValueError(f"Invalid log_color: {self.log_color}")
+
+    def _apply_verbosity_settings(self) -> None:
+        """Apply verbosity-specific settings based on user_output_level."""
+        level = self.user_output_level
+
+        # Level 0 (QUIET) - Minimal output
+        if level == VerbosityLevel.QUIET:
+            self.show_progress_bars = False
+            self.show_status_indicators = False
+            self.show_spinners = False
+            self.show_performance_metrics = False
+            self.show_actionable_suggestions = False
+            self.show_operation_steps = False
+            self.show_configuration_details = False
+            self.show_internal_state = False
+            self.show_raw_data = False
+            self.show_detailed_metrics = False
+            self.show_raw_metrics = False
+            self.show_error_details = False
+            self.show_detailed_progress = False
+
+        # Level 1 (NORMAL) - Default behavior
+        elif level == VerbosityLevel.NORMAL:
+            self.show_progress_bars = True
+            self.show_status_indicators = True
+            self.show_spinners = True
+            self.show_performance_metrics = True
+            self.show_actionable_suggestions = True
+            self.show_operation_steps = False
+            self.show_configuration_details = False
+            self.show_internal_state = False
+            self.show_raw_data = False
+            self.show_detailed_metrics = False
+            self.show_raw_metrics = False
+            self.show_error_details = False
+            self.show_detailed_progress = False
+
+        # Level 2 (VERBOSE) - Detailed information
+        elif level == VerbosityLevel.VERBOSE:
+            self.show_progress_bars = True
+            self.show_status_indicators = True
+            self.show_spinners = True
+            self.show_performance_metrics = True
+            self.show_actionable_suggestions = True
+            self.show_operation_steps = True
+            self.show_configuration_details = True
+            self.show_internal_state = False
+            self.show_raw_data = False
+            self.show_detailed_metrics = True
+            self.show_raw_metrics = False
+            self.show_error_details = True
+            self.show_detailed_progress = True
+
+        # Level 3 (DEBUG) - All information
+        elif level == VerbosityLevel.DEBUG:
+            self.show_progress_bars = True
+            self.show_status_indicators = True
+            self.show_spinners = True
+            self.show_performance_metrics = True
+            self.show_actionable_suggestions = True
+            self.show_operation_steps = True
+            self.show_configuration_details = True
+            self.show_internal_state = True
+            self.show_raw_data = True
+            self.show_detailed_metrics = True
+            self.show_raw_metrics = True
+            self.show_error_details = True
+            self.show_detailed_progress = True
+            self.show_stack_traces = True
 
     def get_command_config(self, command: str) -> "LoggingConfig":
         """Get configuration with command-specific overrides.
@@ -98,11 +184,11 @@ class LoggingConfig:
 
     def is_verbose(self) -> bool:
         """Check if verbose output is enabled."""
-        return self.user_output_level in [VerbosityLevel.VERBOSE, VerbosityLevel.DEBUG]
+        return self.user_output_level >= VerbosityLevel.VERBOSE
 
     def is_debug(self) -> bool:
         """Check if debug output is enabled."""
-        return self.user_output_level == VerbosityLevel.DEBUG
+        return self.user_output_level >= VerbosityLevel.DEBUG
 
     def is_quiet(self) -> bool:
         """Check if quiet output is enabled."""
@@ -125,6 +211,20 @@ class LoggingConfig:
             and not self.is_quiet()
             and self.should_use_color()
         )
+
+    def get_developer_log_level(self) -> LogLevel:
+        """Get the appropriate developer log level based on verbosity.
+
+        Returns:
+            LogLevel appropriate for the current verbosity level
+        """
+        level_mapping = {
+            VerbosityLevel.QUIET: LogLevel.ERROR,
+            VerbosityLevel.NORMAL: LogLevel.INFO,
+            VerbosityLevel.VERBOSE: LogLevel.DEBUG,
+            VerbosityLevel.DEBUG: LogLevel.DEBUG,
+        }
+        return level_mapping.get(self.user_output_level, LogLevel.INFO)
 
 
 def _is_color_supported() -> bool:
@@ -151,7 +251,10 @@ def _is_color_supported() -> bool:
 def _parse_enum_value(enum_class: type, value: str) -> Any:
     """Parse string value to enum, with fallback to default."""
     try:
-        return enum_class(value.upper())
+        if enum_class == VerbosityLevel:
+            return VerbosityLevel.from_string(value)
+        else:
+            return enum_class(value.upper())
     except (ValueError, KeyError):
         # Return first enum value as default
         return list(enum_class)[0]
@@ -201,13 +304,19 @@ def _load_from_env() -> Dict[str, Any]:
         "TRACK_TOOL_CALLS",
         "TRACK_TOKEN_COUNTS",
         "TRACK_WALL_TIME",
+        "SHOW_DETAILED_METRICS",
+        "SHOW_RAW_METRICS",
     ]:
         value = _parse_bool_env(key)
         if value is not None:
             config[key.lower()] = value
 
     # Error handling
-    for key in ["SHOW_STACK_TRACES", "SHOW_ACTIONABLE_SUGGESTIONS"]:
+    for key in [
+        "SHOW_STACK_TRACES",
+        "SHOW_ACTIONABLE_SUGGESTIONS",
+        "SHOW_ERROR_DETAILS",
+    ]:
         value = _parse_bool_env(key)
         if value is not None:
             config[key.lower()] = value
@@ -217,7 +326,23 @@ def _load_from_env() -> Dict[str, Any]:
         config["error_context_lines"] = error_context
 
     # Rich UI settings
-    for key in ["SHOW_PROGRESS_BARS", "SHOW_STATUS_INDICATORS", "SHOW_SPINNERS"]:
+    for key in [
+        "SHOW_PROGRESS_BARS",
+        "SHOW_STATUS_INDICATORS",
+        "SHOW_SPINNERS",
+        "SHOW_DETAILED_PROGRESS",
+    ]:
+        value = _parse_bool_env(key)
+        if value is not None:
+            config[key.lower()] = value
+
+    # Verbosity-specific settings
+    for key in [
+        "SHOW_OPERATION_STEPS",
+        "SHOW_CONFIGURATION_DETAILS",
+        "SHOW_INTERNAL_STATE",
+        "SHOW_RAW_DATA",
+    ]:
         value = _parse_bool_env(key)
         if value is not None:
             config[key.lower()] = value
@@ -268,3 +393,4 @@ def update_logging_config(**overrides: Any) -> None:
             raise ValueError(f"Unknown configuration key: {key}")
 
     _config._validate_config()
+    _config._apply_verbosity_settings()

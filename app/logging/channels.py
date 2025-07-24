@@ -37,6 +37,12 @@ class UserOutput:
 
     This class provides a user-friendly interface with support for different
     verbosity levels, progress tracking, and performance metrics display.
+
+    Phase 3 implementation supports 4 verbosity levels (0-3):
+    - QUIET (0): Only critical errors and final results
+    - NORMAL (1): Default level with success/failure status and basic metrics
+    - VERBOSE (2): Detailed operation steps and extended metrics
+    - DEBUG (3): All available information including raw data and internal state
     """
 
     def __init__(self, config: LoggingConfig):
@@ -56,6 +62,10 @@ class UserOutput:
         self._current_status: Optional[Status] = None
         self._performance_metrics: Dict[str, Any] = {}
         self._operation_start_times: Dict[str, float] = {}
+        self._operation_steps: Dict[str, List[str]] = {}
+        self._operation_metrics: Dict[str, Dict[str, Any]] = {}
+        self._token_counts: Dict[str, int] = {}
+        self._tool_call_counts: Dict[str, int] = {}
 
     def info(self, message: str, emoji: Optional[str] = None, **kwargs: Any) -> None:
         """Display an info message.
@@ -116,14 +126,14 @@ class UserOutput:
             emoji: Optional emoji prefix
             **kwargs: Additional formatting options
         """
-        if not self.config.is_quiet():
-            if error:
-                formatted = self.formatter.format_error(error, context)
-            else:
-                formatted = self.formatter.format_message(
-                    message, "error", emoji=emoji, **kwargs
-                )
-            self.console.print(formatted)
+        # Always show errors, even in quiet mode
+        if error and self.config.show_error_details:
+            formatted = self.formatter.format_error(error, context)
+        else:
+            formatted = self.formatter.format_message(
+                message, "error", emoji=emoji, **kwargs
+            )
+        self.console.print(formatted)
 
     def debug(self, message: str, **kwargs: Any) -> None:
         """Display a debug message (only in debug mode).
@@ -151,6 +161,91 @@ class UserOutput:
             )
             self.console.print(formatted)
 
+    def step(
+        self, message: str, operation: Optional[str] = None, **kwargs: Any
+    ) -> None:
+        """Display an operation step (only in verbose or debug mode).
+
+        Args:
+            message: Step message
+            operation: Operation name for tracking
+            **kwargs: Additional formatting options
+        """
+        if self.config.show_operation_steps:
+            formatted = self.formatter.format_message(
+                message, "info", emoji="⚡", **kwargs
+            )
+            self.console.print(formatted)
+
+            # Track step for operation if provided
+            if operation:
+                if operation not in self._operation_steps:
+                    self._operation_steps[operation] = []
+                self._operation_steps[operation].append(message)
+
+    def detail(self, message: str, **kwargs: Any) -> None:
+        """Display detailed information (only in verbose or debug mode).
+
+        Args:
+            message: Detailed message
+            **kwargs: Additional formatting options
+        """
+        if self.config.user_output_level.should_show_details():
+            formatted = self.formatter.format_message(
+                message, "info", emoji="🔍", **kwargs
+            )
+            self.console.print(formatted)
+
+    def raw(self, data: Any, label: str = "Raw Data", **kwargs: Any) -> None:
+        """Display raw data (only in debug mode).
+
+        Args:
+            data: Raw data to display
+            label: Label for the data
+            **kwargs: Additional formatting options
+        """
+        if self.config.show_raw_data:
+            if self.config.output_format == OutputFormat.RICH:
+                self.console.print(
+                    Panel(str(data), title=f"🔬 {label}", border_style="dim", **kwargs)
+                )
+            else:
+                self.info(f"🔬 {label}:")
+                self.info(str(data))
+
+    def config_detail(self, key: str, value: Any, **kwargs: Any) -> None:
+        """Display configuration detail (only in verbose or debug mode).
+
+        Args:
+            key: Configuration key
+            value: Configuration value
+            **kwargs: Additional formatting options
+        """
+        if self.config.show_configuration_details:
+            self.detail(f"Config: {key} = {value}", **kwargs)
+
+    def internal_state(self, state: Dict[str, Any], **kwargs: Any) -> None:
+        """Display internal state information (only in debug mode).
+
+        Args:
+            state: Internal state dictionary
+            **kwargs: Additional formatting options
+        """
+        if self.config.show_internal_state:
+            if self.config.output_format == OutputFormat.RICH:
+                state_table = Table(title="🔧 Internal State", show_header=True)
+                state_table.add_column("Component", style="cyan")
+                state_table.add_column("State", style="yellow")
+
+                for component, component_state in state.items():
+                    state_table.add_row(component, str(component_state))
+
+                self.console.print(state_table)
+            else:
+                self.info("🔧 Internal State:")
+                for component, component_state in state.items():
+                    self.info(f"  {component}: {component_state}")
+
     def print_performance_metrics(
         self, metrics: Optional[Dict[str, Any]] = None
     ) -> None:
@@ -166,9 +261,35 @@ class UserOutput:
         if not display_metrics:
             return
 
-        formatted = self.formatter.format_performance_metrics(display_metrics)
-        if formatted:
-            self.console.print(formatted)
+        # Filter metrics based on verbosity level
+        if self.config.show_raw_metrics:
+            # Show all metrics in debug mode
+            filtered_metrics = display_metrics
+        elif self.config.show_detailed_metrics:
+            # Show detailed metrics in verbose mode
+            filtered_metrics = {
+                k: v
+                for k, v in display_metrics.items()
+                if not k.startswith("raw_") and not k.startswith("internal_")
+            }
+        else:
+            # Show basic metrics in normal mode
+            filtered_metrics = {
+                k: v
+                for k, v in display_metrics.items()
+                if k
+                in [
+                    "ingestion_duration",
+                    "qa_session_duration",
+                    "total_files",
+                    "total_chunks",
+                ]
+            }
+
+        if filtered_metrics:
+            formatted = self.formatter.format_performance_metrics(filtered_metrics)
+            if formatted:
+                self.console.print(formatted)
 
     def add_performance_metric(self, key: str, value: Any) -> None:
         """Add a performance metric.
@@ -191,6 +312,10 @@ class UserOutput:
             operation_name: Name of the operation being timed
         """
         self._operation_start_times[operation_name] = time.time()
+        if operation_name not in self._operation_steps:
+            self._operation_steps[operation_name] = []
+        if operation_name not in self._operation_metrics:
+            self._operation_metrics[operation_name] = {}
 
     def end_operation_timer(self, operation_name: str) -> float:
         """End timing an operation and return duration.
@@ -204,9 +329,80 @@ class UserOutput:
         if operation_name in self._operation_start_times:
             duration = time.time() - self._operation_start_times[operation_name]
             self.add_performance_metric(f"{operation_name}_duration", duration)
+
+            # Add operation summary if verbose
+            if self.config.show_operation_steps:
+                steps = self._operation_steps.get(operation_name, [])
+                self.step(
+                    f"Operation '{operation_name}' completed in {duration:.2f}s with {len(steps)} steps"
+                )
+
             del self._operation_start_times[operation_name]
             return duration
         return 0.0
+
+    def add_token_count(self, operation: str, count: int) -> None:
+        """Add token count for an operation.
+
+        Args:
+            operation: Operation name
+            count: Token count
+        """
+        if self.config.track_token_counts:
+            self._token_counts[operation] = count
+            if self.config.show_detailed_metrics:
+                self.detail(f"Token count for {operation}: {count}")
+
+    def add_tool_call(self, tool_name: str) -> None:
+        """Track a tool call.
+
+        Args:
+            tool_name: Name of the tool
+        """
+        if self.config.track_tool_calls:
+            self._tool_call_counts[tool_name] = (
+                self._tool_call_counts.get(tool_name, 0) + 1
+            )
+            if self.config.show_detailed_metrics:
+                self.detail(
+                    f"Tool call: {tool_name} (total: {self._tool_call_counts[tool_name]})"
+                )
+
+    def get_operation_summary(self, operation_name: str) -> Dict[str, Any]:
+        """Get a summary of an operation.
+
+        Args:
+            operation_name: Name of the operation
+
+        Returns:
+            Operation summary dictionary
+        """
+        summary = {
+            "duration": self._performance_metrics.get(f"{operation_name}_duration", 0),
+            "steps": self._operation_steps.get(operation_name, []),
+            "token_count": self._token_counts.get(operation_name, 0),
+        }
+
+        # Add operation-specific metrics
+        if operation_name in self._operation_metrics:
+            summary.update(self._operation_metrics[operation_name])
+
+        return summary
+
+    def print_operation_summary(self, operation_name: str) -> None:
+        """Print a detailed summary of an operation.
+
+        Args:
+            operation_name: Name of the operation
+        """
+        if not self.config.show_detailed_metrics:
+            return
+
+        summary = self.get_operation_summary(operation_name)
+        formatted = self.formatter.format_operation_summary(operation_name, summary)
+
+        if formatted:
+            self.console.print(formatted)
 
     @contextmanager
     def progress_bar(self, total: int, description: str = "", **kwargs: Any):
@@ -243,6 +439,52 @@ class UserOutput:
                 yield progress
         finally:
             self._current_progress = None
+
+    @contextmanager
+    def detailed_progress_bar(
+        self, total: int, description: str = "", operation: str = "", **kwargs: Any
+    ):
+        """Context manager for detailed progress bar with operation tracking.
+
+        Args:
+            total: Total number of items
+            description: Progress bar description
+            operation: Operation name for tracking
+            **kwargs: Additional progress bar options
+
+        Yields:
+            Progress bar instance
+        """
+        if not self.config.show_detailed_progress or self.config.is_quiet():
+            # Return a dummy progress bar that does nothing
+            yield DummyProgressBar()
+            return
+
+        # Start operation timer if provided
+        if operation:
+            self.start_operation_timer(operation)
+
+        # Enhanced progress bar with detailed tracking
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
+            console=self.console,
+            **kwargs,
+        )
+
+        try:
+            with progress:
+                self._current_progress = progress
+                yield progress
+        finally:
+            self._current_progress = None
+            # End operation timer if provided
+            if operation:
+                self.end_operation_timer(operation)
 
     @contextmanager
     def status(self, status: str, spinner: str = "dots"):
@@ -711,6 +953,16 @@ class DeveloperLogger:
         if self.config.log_level.value <= 40:  # ERROR
             self.logger.error(message, exc_info=exc_info, extra=kwargs)
 
+    def exception(self, message: str, **kwargs: Any) -> None:
+        """Log an exception with traceback.
+
+        Args:
+            message: Exception message
+            **kwargs: Additional context
+        """
+        if self.config.log_level.value <= 40:  # ERROR
+            self.logger.exception(message, extra=kwargs)
+
     def critical(self, message: str, exc_info: bool = True, **kwargs: Any) -> None:
         """Log a critical message.
 
@@ -757,3 +1009,53 @@ class DeveloperLogger:
         """
         if self.config.track_token_counts:
             self.debug(f"Token count: {count}", token_count=count, **kwargs)
+
+    def log_operation_step(self, operation: str, step: str, **kwargs: Any) -> None:
+        """Log an operation step.
+
+        Args:
+            operation: Operation name
+            step: Step description
+            **kwargs: Additional context
+        """
+        if self.config.show_operation_steps:
+            self.debug(
+                f"Operation step: {operation} - {step}",
+                operation=operation,
+                step=step,
+                **kwargs,
+            )
+
+    def log_internal_state(
+        self, component: str, state: Dict[str, Any], **kwargs: Any
+    ) -> None:
+        """Log internal state information.
+
+        Args:
+            component: Component name
+            state: State dictionary
+            **kwargs: Additional context
+        """
+        if self.config.show_internal_state:
+            self.debug(
+                f"Internal state: {component}",
+                component=component,
+                state=state,
+                **kwargs,
+            )
+
+    def log_configuration(self, key: str, value: Any, **kwargs: Any) -> None:
+        """Log configuration details.
+
+        Args:
+            key: Configuration key
+            value: Configuration value
+            **kwargs: Additional context
+        """
+        if self.config.show_configuration_details:
+            self.debug(
+                f"Configuration: {key} = {value}",
+                config_key=key,
+                config_value=value,
+                **kwargs,
+            )
