@@ -6,6 +6,7 @@ ConversationalRetrievalChain with custom document formatting and memory manageme
 """
 
 import os
+import time
 import warnings
 from typing import Any, List
 
@@ -18,6 +19,8 @@ from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.vectorstores import VectorStore
 
+from app.metrics import get_metrics_collector
+from app.metrics.models import ErrorCategory, ToolCallStatus
 from app.rag.citations import render_citations
 
 # Suppress LangChain deprecation warnings
@@ -81,14 +84,88 @@ class CustomStuffDocumentsChain(StuffDocumentsChain):
         Returns:
             Dictionary containing the processed answer
         """
+        # Get metrics collector for tracking
+        collector = get_metrics_collector()
+
         # Call the parent method to get the raw answer
-        result = super()._call(inputs)
+        start_time = time.time()
+        try:
+            result = super()._call(inputs)
+            duration = time.time() - start_time
+
+            # Record successful LLM inference
+            if hasattr(collector, "active_operations") and collector.active_operations:
+                operation_id = next(iter(collector.active_operations.keys()), None)
+                if operation_id:
+                    collector.add_component_timing(
+                        operation_id, "llm_inference", duration
+                    )
+                    collector.record_tool_call(
+                        operation_id=operation_id,
+                        tool_name="llm_inference",
+                        status=ToolCallStatus.SUCCESS,
+                        duration=duration,
+                        metadata={"documents_count": len(self._source_docs)},
+                    )
+
+        except Exception as e:
+            duration = time.time() - start_time
+
+            # Record failed LLM inference
+            if hasattr(collector, "active_operations") and collector.active_operations:
+                operation_id = next(iter(collector.active_operations.keys()), None)
+                if operation_id:
+                    collector.add_component_timing(
+                        operation_id, "llm_inference", duration
+                    )
+                    collector.record_tool_call(
+                        operation_id=operation_id,
+                        tool_name="llm_inference",
+                        status=ToolCallStatus.FAILURE,
+                        duration=duration,
+                        error_category=ErrorCategory.UNKNOWN,
+                        error_message=str(e),
+                        metadata={"documents_count": len(self._source_docs)},
+                    )
+            raise
 
         # Get the raw answer from the result
         raw_answer = result[self.output_key]
 
         # Post-process the answer with citations
-        processed_answer = render_citations(raw_answer, self._source_docs)
+        citation_start_time = time.time()
+        try:
+            processed_answer = render_citations(raw_answer, self._source_docs)
+            citation_duration = time.time() - citation_start_time
+
+            # Record citation processing
+            if hasattr(collector, "active_operations") and collector.active_operations:
+                operation_id = next(iter(collector.active_operations.keys()), None)
+                if operation_id:
+                    collector.add_component_timing(
+                        operation_id, "citation_processing", citation_duration
+                    )
+
+        except Exception as e:
+            citation_duration = time.time() - citation_start_time
+
+            # Record citation processing failure
+            if hasattr(collector, "active_operations") and collector.active_operations:
+                operation_id = next(iter(collector.active_operations.keys()), None)
+                if operation_id:
+                    collector.add_component_timing(
+                        operation_id, "citation_processing", citation_duration
+                    )
+                    collector.record_tool_call(
+                        operation_id=operation_id,
+                        tool_name="citation_processing",
+                        status=ToolCallStatus.FAILURE,
+                        duration=citation_duration,
+                        error_category=ErrorCategory.VALIDATION,
+                        error_message=str(e),
+                    )
+            # Continue without citations rather than failing completely
+            processed_answer = raw_answer
 
         # Return the processed answer under the chain's output_key
         return {self.output_key: processed_answer}

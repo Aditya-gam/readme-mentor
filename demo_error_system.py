@@ -34,8 +34,6 @@ def demo_configuration_errors():
     print("🔧 CONFIGURATION ERRORS DEMO")
     print("=" * 60)
 
-    error_manager = get_error_manager()
-
     # Demo missing API key
     print("\n1. Missing OpenAI API Key:")
     try:

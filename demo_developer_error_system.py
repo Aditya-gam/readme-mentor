@@ -79,8 +79,6 @@ def demo_exception_handling():
     print("DEMO: Exception Handling")
     print("=" * 60)
 
-    dev_error_manager = get_developer_error_manager()
-
     # Simulate different types of exceptions
     exceptions_to_test = [
         ("TypeError", TypeError("Invalid type for operation")),

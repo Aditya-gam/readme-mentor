@@ -56,6 +56,16 @@ class Settings:
         # Development settings
         self.ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 
+        # Metrics settings
+        self.ENABLE_METRICS: bool = (
+            os.getenv("ENABLE_METRICS", "true").lower() == "true"
+        )
+        self.ENABLE_METRICS_PERSISTENCE: bool = (
+            os.getenv("ENABLE_METRICS_PERSISTENCE", "true").lower() == "true"
+        )
+        self.METRICS_SESSION_ID: Optional[str] = os.getenv(
+            "METRICS_SESSION_ID")
+
     def validate(self) -> List[ConfigurationError]:
         """Validate required settings and return any configuration errors.
 
@@ -67,7 +77,7 @@ class Settings:
 
         # Check for required API keys
         if not self.OPENAI_API_KEY:
-            error = error_manager.create_user_facing_error(
+            error_manager.create_user_facing_error(
                 error_code=ErrorCode.MISSING_API_KEY,
                 title="Missing OpenAI API Key",
                 message="OpenAI API key is required for AI-powered features. Please set the OPENAI_API_KEY environment variable.",
@@ -88,7 +98,7 @@ class Settings:
 
         # Check for valid secret key
         if not self.SECRET_KEY or self.SECRET_KEY == "your_secret_key_here":
-            error = error_manager.create_user_facing_error(
+            error_manager.create_user_facing_error(
                 error_code=ErrorCode.INVALID_SETTING_VALUE,
                 title="Invalid Secret Key",
                 message="SECRET_KEY must be set to a secure value in production. Please set a strong secret key.",
@@ -109,7 +119,7 @@ class Settings:
 
         # Check for valid port number
         if not (1 <= self.PORT <= 65535):
-            error = error_manager.create_user_facing_error(
+            error_manager.create_user_facing_error(
                 error_code=ErrorCode.INVALID_SETTING_VALUE,
                 title="Invalid Port Number",
                 message=f"Port number must be between 1 and 65535. Current value: {self.PORT}",
@@ -136,7 +146,7 @@ class Settings:
                 try:
                     dir_path.mkdir(parents=True, exist_ok=True)
                 except PermissionError:
-                    error = error_manager.create_user_facing_error(
+                    error_manager.create_user_facing_error(
                         error_code=ErrorCode.ACCESS_DENIED,
                         title="Permission Denied",
                         message=f"Cannot create required directory: {dir_path}. Please check permissions.",
