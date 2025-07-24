@@ -724,6 +724,13 @@ class ErrorFormatter:
             user_output: User output instance
         """
         self.user_output = user_output
+        # Import here to avoid circular imports
+        from ..errors import get_error_manager, handle_exception
+        from ..models import UserFacingError
+
+        self.error_manager = get_error_manager()
+        self.handle_exception = handle_exception
+        self.UserFacingError = UserFacingError
 
     def operation_error(
         self, operation: str, error: Exception, context: Optional[str] = None
@@ -735,65 +742,95 @@ class ErrorFormatter:
             error: Exception that occurred
             context: Additional context information
         """
+        # Convert to user-facing error if not already
+        if isinstance(error, self.UserFacingError):
+            user_error = error
+        else:
+            user_error = self.handle_exception(
+                error,
+                context={"operation": operation, "component": "operation"},
+                operation=operation,
+            )
+
+        self._display_user_facing_error(user_error, operation)
+
+    def _display_user_facing_error(self, user_error, operation: str) -> None:
+        """Display a user-facing error in the appropriate format.
+
+        Args:
+            user_error: User-facing error to display
+            operation: Operation that failed
+        """
         if self.user_output.config.output_format == OutputFormat.RICH:
-            # Enhanced error panel with suggestions
+            # Enhanced error panel with structured information
             error_content = f"""
-[bold red]❌ Operation Failed:[/bold red] {operation}
-[bold red]Error Type:[/bold red] {type(error).__name__}
-[bold red]Error Message:[/bold red] {str(error)}
+[bold red]❌ {user_error.title}[/bold red]
+[bold red]Operation:[/bold red] {operation}
+[bold red]Error Code:[/bold red] {user_error.error_code}
+[bold red]Category:[/bold red] {user_error.category.title()}
+[bold red]Severity:[/bold red] {user_error.severity.title()}
+[bold red]Message:[/bold red] {user_error.message}
 """
 
-            if context:
-                error_content += f"[bold yellow]Context:[/bold yellow] {context}\n"
+            if user_error.context:
+                error_content += f"[bold yellow]Component:[/bold yellow] {user_error.context.component}\n"
 
-            suggestions = self._get_error_suggestions(error)
-            if suggestions:
+            if user_error.suggestions:
                 error_content += "\n[bold cyan]💡 Suggestions:[/bold cyan]\n"
-                for suggestion in suggestions:
-                    error_content += f"• {suggestion}\n"
+                for suggestion in user_error.suggestions:
+                    error_content += (
+                        f"• [bold]{suggestion.title}:[/bold] {suggestion.description}\n"
+                    )
+                    if suggestion.command:
+                        error_content += f"  [dim]Command:[/dim] {suggestion.command}\n"
+                    if suggestion.url:
+                        error_content += f"  [dim]Help:[/dim] {suggestion.url}\n"
+
+            if user_error.retry_after:
+                error_content += f"\n[bold yellow]⏰ Retry after:[/bold yellow] {user_error.retry_after} seconds\n"
 
             error_panel = Panel(
                 error_content,
-                title="[bold red]Error Report[/bold red]",
+                title=f"[bold red]Error Report - {user_error.error_code}[/bold red]",
                 border_style="red",
                 padding=(1, 2),
             )
             self.user_output.console.print(error_panel)
 
         elif self.user_output.config.output_format == OutputFormat.JSON:
-            # JSON format with standardized error structure
-            error_data = {
-                "timestamp": datetime.now().isoformat(),
-                "type": "operation_error",
-                "operation": operation,
-                "error_type": type(error).__name__,
-                "error_message": str(error),
-                "error_code": self._get_error_code(error),
-                "status": "failed",
-            }
+            # JSON format with complete error structure
+            error_data = user_error.dict()
+            error_data["operation"] = operation
+            error_data["display_timestamp"] = datetime.now().isoformat()
 
-            if context:
-                error_data["context"] = context
-
-            suggestions = self._get_error_suggestions(error)
-            if suggestions:
-                error_data["suggestions"] = suggestions
-
-            self.user_output.console.print(json.dumps(error_data))
+            self.user_output.console.print(json.dumps(error_data, indent=2))
         else:
-            # Plain format with structured layout and clear error messages
-            self.user_output.error(f"❌ Operation Failed: {operation}")
-            self.user_output.error(f"Error Type: {type(error).__name__}")
-            self.user_output.error(f"Error Message: {str(error)}")
+            # Plain format with structured layout
+            self.user_output.error(f"❌ {user_error.title}")
+            self.user_output.error(f"Operation: {operation}")
+            self.user_output.error(f"Error Code: {user_error.error_code}")
+            self.user_output.error(f"Category: {user_error.category.title()}")
+            self.user_output.error(f"Severity: {user_error.severity.title()}")
+            self.user_output.error(f"Message: {user_error.message}")
 
-            if context:
-                self.user_output.error(f"Context: {context}")
+            if user_error.context:
+                self.user_output.error(f"Component: {user_error.context.component}")
 
-            suggestions = self._get_error_suggestions(error)
-            if suggestions:
+            if user_error.suggestions:
                 self.user_output.info("💡 Suggestions:")
-                for suggestion in suggestions:
-                    self.user_output.info(f"  • {suggestion}")
+                for suggestion in user_error.suggestions:
+                    self.user_output.info(
+                        f"  • {suggestion.title}: {suggestion.description}"
+                    )
+                    if suggestion.command:
+                        self.user_output.info(f"    Command: {suggestion.command}")
+                    if suggestion.url:
+                        self.user_output.info(f"    Help: {suggestion.url}")
+
+            if user_error.retry_after:
+                self.user_output.info(
+                    f"⏰ Retry after: {user_error.retry_after} seconds"
+                )
 
     def validation_error(self, field: str, value: Any, message: str) -> None:
         """Format validation error with enhanced display.
@@ -885,55 +922,94 @@ class ErrorFormatter:
             self.user_output.info("  • Check if the service is available")
 
     def repository_error(self, repo_url: str, error: Exception) -> None:
-        """Format repository error with enhanced suggestions.
+        """Format repository error with enhanced display.
 
         Args:
-            repo_url: Repository URL that failed
-            error: Repository error
+            repo_url: Repository URL that caused the error
+            error: Exception that occurred
         """
-        if self.user_output.config.output_format == OutputFormat.RICH:
-            repo_panel = Panel(
-                f"[bold red]📚 Repository Error[/bold red]\n"
-                f"[yellow]Repository:[/yellow] {repo_url}\n"
-                f"[red]Error:[/red] {str(error)}\n\n"
-                f"[bold cyan]💡 Suggestions:[/bold cyan]\n"
-                f"• Verify the repository URL is correct\n"
-                f"• Check if the repository is public\n"
-                f"• Ensure you have access to the repository\n"
-                f"• Check your GitHub credentials if private",
-                title="[bold red]Repository Issue[/bold red]",
-                border_style="red",
-                padding=(1, 2),
-            )
-            self.user_output.console.print(repo_panel)
-
-        elif self.user_output.config.output_format == OutputFormat.JSON:
-            repo_data = {
-                "timestamp": datetime.now().isoformat(),
-                "type": "repository_error",
-                "repository_url": repo_url,
-                "error_type": type(error).__name__,
-                "error_message": str(error),
-                "error_code": "REPOSITORY_ERROR",
-                "status": "failed",
-                "suggestions": [
-                    "Verify the repository URL is correct",
-                    "Check if the repository is public",
-                    "Ensure you have access to the repository",
-                    "Check your GitHub credentials if private",
-                ],
-            }
-            self.user_output.console.print(json.dumps(repo_data))
+        # Convert to user-facing error
+        if isinstance(error, self.UserFacingError):
+            user_error = error
         else:
-            # Plain format with structured layout
-            self.user_output.error("📚 Repository Error")
-            self.user_output.error(f"Repository: {repo_url}")
-            self.user_output.error(f"Error: {str(error)}")
-            self.user_output.info("💡 Suggestions:")
-            self.user_output.info("  • Verify the repository URL is correct")
-            self.user_output.info("  • Check if the repository is public")
-            self.user_output.info("  • Ensure you have access to the repository")
-            self.user_output.info("  • Check your GitHub credentials if private")
+            user_error = self.handle_exception(
+                error,
+                context={
+                    "url": repo_url,
+                    "operation": "repository_access",
+                    "component": "github",
+                },
+                operation="repository_access",
+            )
+
+        self._display_user_facing_error(user_error, f"Repository: {repo_url}")
+
+    def configuration_error(
+        self, error: Exception, setting_name: Optional[str] = None
+    ) -> None:
+        """Format configuration error with enhanced display.
+
+        Args:
+            error: Configuration error that occurred
+            setting_name: Name of the problematic setting
+        """
+        # Convert to user-facing error
+        if isinstance(error, self.UserFacingError):
+            user_error = error
+        else:
+            context = {"operation": "configuration", "component": "config"}
+            if setting_name:
+                context["setting_name"] = setting_name
+            user_error = self.handle_exception(
+                error, context, operation="configuration"
+            )
+
+        self._display_user_facing_error(user_error, "Configuration")
+
+    def network_error(self, url: str, error: Exception) -> None:
+        """Format network error with enhanced display.
+
+        Args:
+            url: URL that caused the network error
+            error: Network error that occurred
+        """
+        # Convert to user-facing error
+        if isinstance(error, self.UserFacingError):
+            user_error = error
+        else:
+            user_error = self.handle_exception(
+                error,
+                context={
+                    "url": url,
+                    "operation": "network_request",
+                    "component": "network",
+                },
+                operation="network_request",
+            )
+
+        self._display_user_facing_error(user_error, f"Network: {url}")
+
+    def permission_error(
+        self, error: Exception, resource: Optional[str] = None
+    ) -> None:
+        """Format permission error with enhanced display.
+
+        Args:
+            error: Permission error that occurred
+            resource: Resource that requires permissions
+        """
+        # Convert to user-facing error
+        if isinstance(error, self.UserFacingError):
+            user_error = error
+        else:
+            context = {"operation": "permission_check", "component": "auth"}
+            if resource:
+                context["resource"] = resource
+            user_error = self.handle_exception(
+                error, context, operation="permission_check"
+            )
+
+        self._display_user_facing_error(user_error, "Permission Check")
 
     def _get_error_suggestions(self, error: Exception) -> List[str]:
         """Get suggestions based on error type."""

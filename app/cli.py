@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from .embeddings.ingest import ingest_repository
+from .errors import handle_exception
 from .logging import UserOutput, setup_logging
 from .logging.enums import VerbosityLevel
 
@@ -352,11 +353,17 @@ def run_ingest(args: argparse.Namespace) -> int:
         user_output.error("❌ Ingestion interrupted by user", emoji="❌")
         return 1
     except Exception as e:
-        # Enhanced error handling with suggestions
-        suggestions = user_output.formatter._get_error_suggestions(e)
-        user_output.print_error_summary(
-            error=e, context="Repository ingestion", suggestions=suggestions
+        # Enhanced error handling with new error system
+        user_error = handle_exception(
+            e,
+            context={
+                "repo_url": args.repo_url,
+                "operation": "repository_ingestion",
+                "component": "cli",
+            },
+            operation="repository_ingestion",
         )
+        user_output.formatter.operation_error("Repository Ingestion", user_error)
 
         # Log error details if verbose
         if user_output.config.show_error_details:
@@ -741,11 +748,13 @@ def run_qa(args: argparse.Namespace) -> int:
         user_output.info("👋 Goodbye!", emoji="👋")
         return 0
     except Exception as e:
-        # Enhanced error handling with suggestions
-        suggestions = user_output.formatter._get_error_suggestions(e)
-        user_output.print_error_summary(
-            error=e, context="Interactive Q&A session", suggestions=suggestions
+        # Enhanced error handling with new error system
+        user_error = handle_exception(
+            e,
+            context={"operation": "interactive_qa", "component": "cli"},
+            operation="interactive_qa",
         )
+        user_output.formatter.operation_error("Interactive Q&A Session", user_error)
 
         # Log error details if verbose
         if user_output.config.show_error_details:
