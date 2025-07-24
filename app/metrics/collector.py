@@ -7,9 +7,14 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import psutil
+
+if TYPE_CHECKING:
+    from rich.console import Console
+
+    from ..logging.enums import OutputFormat, VerbosityLevel
 
 from .models import (
     CostEstimate,
@@ -660,3 +665,74 @@ class MetricsCollector:
         )
         self.active_operations.clear()
         logger.info("Cleared current session data")
+
+    def display_metrics(
+        self,
+        verbosity: Optional["VerbosityLevel"] = None,
+        output_format: Optional["OutputFormat"] = None,
+        console: Optional["Console"] = None,
+    ) -> None:
+        """Display current session metrics.
+
+        Args:
+            verbosity: Verbosity level for display detail
+            output_format: Output format (rich, plain, json)
+            console: Rich console instance for output
+        """
+        from rich.console import Console
+
+        from ..logging.enums import OutputFormat, VerbosityLevel
+        from .display import MetricsDisplayFormatter
+
+        # Use defaults if not provided
+        if verbosity is None:
+            verbosity = VerbosityLevel.NORMAL
+        if output_format is None:
+            output_format = OutputFormat.RICH
+        if console is None:
+            console = Console()
+
+        # Get session summary
+        session_data = self.get_session_summary()
+
+        # Create display formatter and display metrics
+        formatter = MetricsDisplayFormatter(console)
+        formatter.display_metrics(session_data, verbosity, output_format)
+
+    def display_session_summary(self, console: Optional["Console"] = None) -> None:
+        """Display a quick session summary.
+
+        Args:
+            console: Rich console instance for output
+        """
+        from rich.console import Console
+
+        from ..logging.enums import OutputFormat, VerbosityLevel
+        from .display import MetricsDisplayFormatter
+
+        if console is None:
+            console = Console()
+
+        session_data = self.get_session_summary()
+        formatter = MetricsDisplayFormatter(console)
+        formatter.display_metrics(
+            session_data, VerbosityLevel.NORMAL, OutputFormat.RICH
+        )
+
+    def display_detailed_analysis(self, console: Optional["Console"] = None) -> None:
+        """Display detailed analysis with trends and optimization suggestions.
+
+        Args:
+            console: Rich console instance for output
+        """
+        from rich.console import Console
+
+        from ..logging.enums import OutputFormat, VerbosityLevel
+        from .display import MetricsDisplayFormatter
+
+        if console is None:
+            console = Console()
+
+        session_data = self.get_session_summary()
+        formatter = MetricsDisplayFormatter(console)
+        formatter.display_metrics(session_data, VerbosityLevel.DEBUG, OutputFormat.RICH)

@@ -63,8 +63,7 @@ class Settings:
         self.ENABLE_METRICS_PERSISTENCE: bool = (
             os.getenv("ENABLE_METRICS_PERSISTENCE", "true").lower() == "true"
         )
-        self.METRICS_SESSION_ID: Optional[str] = os.getenv(
-            "METRICS_SESSION_ID")
+        self.METRICS_SESSION_ID: Optional[str] = os.getenv("METRICS_SESSION_ID")
 
     def validate(self) -> List[ConfigurationError]:
         """Validate required settings and return any configuration errors.

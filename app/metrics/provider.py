@@ -45,8 +45,7 @@ def get_metrics_collector(session_id: Optional[str] = None) -> MetricsCollector:
         else:
             # Create a dummy collector that does nothing
             _metrics_collector = DummyMetricsCollector()
-            logger.info(
-                "Metrics collection is disabled - using dummy collector")
+            logger.info("Metrics collection is disabled - using dummy collector")
 
     return _metrics_collector
 

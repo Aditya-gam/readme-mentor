@@ -190,6 +190,68 @@ Examples:
     return parser.parse_args(sys.argv[2:])
 
 
+def parse_metrics_arguments() -> argparse.Namespace:
+    """Parse arguments for the metrics command."""
+    parser = argparse.ArgumentParser(
+        description="Display performance metrics and analysis",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  readme-mentor metrics                    # Display current session summary
+  readme-mentor metrics --detailed         # Show detailed analysis
+  readme-mentor metrics --verbosity 2      # Verbose output
+  readme-mentor metrics --output-format json  # JSON output for analysis
+  readme-mentor metrics --load-file metrics_20241201_143022.json  # Load from file
+        """,
+    )
+
+    parser.add_argument(
+        "--detailed",
+        "-d",
+        action="store_true",
+        help="Show detailed analysis with trends and optimization suggestions",
+    )
+
+    parser.add_argument(
+        "--load-file",
+        "-f",
+        type=str,
+        help="Load metrics from a specific file instead of current session",
+    )
+
+    # Enhanced verbosity options
+    verbosity_group = parser.add_mutually_exclusive_group()
+    verbosity_group.add_argument(
+        "--verbosity",
+        "-V",
+        type=int,
+        choices=[0, 1, 2, 3],
+        help="Verbosity level: 0=quiet, 1=normal, 2=verbose, 3=debug (default: 1)",
+    )
+    verbosity_group.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose output (equivalent to --verbosity 2)",
+    )
+    verbosity_group.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress all output except errors (equivalent to --verbosity 0)",
+    )
+
+    parser.add_argument(
+        "--output-format",
+        choices=["rich", "plain", "json"],
+        default="rich",
+        help="Output format (default: rich)",
+    )
+
+    # Parse arguments starting from the third element (after script name and command)
+    return parser.parse_args(sys.argv[2:])
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -199,6 +261,7 @@ def parse_arguments() -> argparse.Namespace:
 Commands:
   ingest    Ingest a GitHub repository for Q&A
   qa        Start interactive Q&A session
+  metrics   Display performance metrics and analysis
 
 Verbosity Levels:
   0 (quiet)    Only critical errors and final results
@@ -213,7 +276,7 @@ For more help on a command:
 
     parser.add_argument(
         "command",
-        choices=["ingest", "qa"],
+        choices=["ingest", "qa", "metrics"],
         help="Command to run",
     )
 
@@ -762,6 +825,118 @@ def run_qa(args: argparse.Namespace) -> int:
         return 1
 
 
+def run_metrics(args: argparse.Namespace) -> int:
+    """Run the metrics command."""
+    # Set up logging based on output format and verbosity
+    user_output_level = get_user_output_level(args)
+    user_output, dev_logger = setup_logging(
+        user_output_level=user_output_level, output_format=args.output_format
+    )
+
+    try:
+        user_output.start_operation_timer("metrics_display")
+        user_output.info("📊 Displaying performance metrics...", emoji="📊")
+
+        # Import metrics functionality
+        from .logging.enums import OutputFormat, VerbosityLevel
+        from .metrics import get_metrics_collector
+
+        # Get verbosity level
+        if args.verbosity is not None:
+            verbosity = VerbosityLevel(args.verbosity)
+        elif args.verbose:
+            verbosity = VerbosityLevel.VERBOSE
+        elif args.quiet:
+            verbosity = VerbosityLevel.QUIET
+        else:
+            verbosity = VerbosityLevel.NORMAL
+
+        # Get output format
+        output_format = OutputFormat(args.output_format)
+
+        # Get metrics collector
+        collector = get_metrics_collector()
+
+        if args.load_file:
+            # Load metrics from file
+            user_output.step("Loading metrics from file", operation="metrics_display")
+            try:
+                from pathlib import Path
+
+                filepath = Path(args.load_file)
+                if not filepath.exists():
+                    user_output.error(f"Metrics file not found: {args.load_file}")
+                    return 1
+
+                # Load metrics data (not used directly, but needed for validation)
+                collector.load_metrics(filepath)
+                user_output.success(
+                    f"✅ Loaded metrics from: {args.load_file}", emoji="✅"
+                )
+
+                # Display loaded metrics
+                collector.display_metrics(
+                    verbosity=verbosity,
+                    output_format=output_format,
+                    console=user_output.console,
+                )
+
+            except Exception as e:
+                user_output.error(f"Failed to load metrics file: {e}")
+                return 1
+
+        else:
+            # Display current session metrics
+            user_output.step(
+                "Displaying current session metrics", operation="metrics_display"
+            )
+
+            if args.detailed:
+                # Show detailed analysis with specified output format
+                collector.display_metrics(
+                    verbosity=VerbosityLevel.DEBUG,
+                    output_format=output_format,
+                    console=user_output.console,
+                )
+            else:
+                # Show session summary with specified output format
+                collector.display_metrics(
+                    verbosity=VerbosityLevel.NORMAL,
+                    output_format=output_format,
+                    console=user_output.console,
+                )
+
+        # End timing and get duration
+        duration = user_output.end_operation_timer("metrics_display")
+        user_output.add_performance_metric("metrics_display_duration", duration)
+
+        # Print operation summary if verbose
+        user_output.print_operation_summary("metrics_display")
+
+        return 0
+
+    except KeyboardInterrupt:
+        user_output.info("👋 Goodbye!", emoji="👋")
+        return 0
+    except Exception as e:
+        # Enhanced error handling with new error system
+        user_error = handle_exception(
+            e,
+            context={"operation": "metrics_display", "component": "cli"},
+            operation="metrics_display",
+        )
+        # Use error formatter for error display
+        from .output.formatters import ErrorFormatter
+
+        error_formatter = ErrorFormatter(user_output)
+        error_formatter.operation_error("Metrics Display", user_error)
+
+        # Log error details if verbose
+        if user_output.config.show_error_details:
+            dev_logger.exception("Metrics display failed")
+        return 1
+
+
 def main() -> int:
     """Main CLI entry point."""
     # Determine command from sys.argv
@@ -769,7 +944,7 @@ def main() -> int:
 
     # Check if this is a subcommand help request
     if (
-        command in ["ingest", "qa"]
+        command in ["ingest", "qa", "metrics"]
         and len(sys.argv) > 2
         and sys.argv[2] in ["--help", "-h"]
     ):
@@ -913,6 +1088,59 @@ Examples:
                 help="Output format (default: rich)",
             )
             parser.print_help()
+        elif command == "metrics":
+            # Create a temporary parser to show help
+            parser = argparse.ArgumentParser(
+                description="Display performance metrics and analysis",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                epilog="""
+Examples:
+  readme-mentor metrics                    # Display current session summary
+  readme-mentor metrics --detailed         # Show detailed analysis
+  readme-mentor metrics --verbosity 2      # Verbose output
+  readme-mentor metrics --output-format json  # JSON output for analysis
+  readme-mentor metrics --load-file metrics_20241201_143022.json  # Load from file
+                """,
+            )
+            parser.add_argument(
+                "--detailed",
+                "-d",
+                action="store_true",
+                help="Show detailed analysis with trends and optimization suggestions",
+            )
+            parser.add_argument(
+                "--load-file",
+                "-f",
+                type=str,
+                help="Load metrics from a specific file instead of current session",
+            )
+            verbosity_group = parser.add_mutually_exclusive_group()
+            verbosity_group.add_argument(
+                "--verbosity",
+                "-V",
+                type=int,
+                choices=[0, 1, 2, 3],
+                help="Verbosity level: 0=quiet, 1=normal, 2=verbose, 3=debug (default: 1)",
+            )
+            verbosity_group.add_argument(
+                "--verbose",
+                "-v",
+                action="store_true",
+                help="Enable verbose output (equivalent to --verbosity 2)",
+            )
+            verbosity_group.add_argument(
+                "--quiet",
+                "-q",
+                action="store_true",
+                help="Suppress all output except errors (equivalent to --verbosity 0)",
+            )
+            parser.add_argument(
+                "--output-format",
+                choices=["rich", "plain", "json"],
+                default="rich",
+                help="Output format (default: rich)",
+            )
+            parser.print_help()
         return 0
 
     # Check if help is requested for main command
@@ -925,6 +1153,7 @@ Examples:
 Commands:
   ingest    Ingest a GitHub repository for Q&A
   qa        Start interactive Q&A session
+  metrics   Display performance metrics and analysis
 
 Verbosity Levels:
   0 (quiet)    Only critical errors and final results
@@ -938,7 +1167,7 @@ For more help on a command:
         )
         parser.add_argument(
             "command",
-            choices=["ingest", "qa"],
+            choices=["ingest", "qa", "metrics"],
             help="Command to run",
         )
         parser.print_help()
@@ -951,6 +1180,9 @@ For more help on a command:
     elif command == "qa":
         qa_args = parse_qa_arguments()
         return run_qa(qa_args)
+    elif command == "metrics":
+        metrics_args = parse_metrics_arguments()
+        return run_metrics(metrics_args)
     else:
         print(f"Unknown command: {command}")
         print("Use --help for usage information")

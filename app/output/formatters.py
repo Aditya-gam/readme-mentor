@@ -966,29 +966,6 @@ class ErrorFormatter:
 
         self._display_user_facing_error(user_error, "Configuration")
 
-    def network_error(self, url: str, error: Exception) -> None:
-        """Format network error with enhanced display.
-
-        Args:
-            url: URL that caused the network error
-            error: Network error that occurred
-        """
-        # Convert to user-facing error
-        if isinstance(error, self.UserFacingError):
-            user_error = error
-        else:
-            user_error = self.handle_exception(
-                error,
-                context={
-                    "url": url,
-                    "operation": "network_request",
-                    "component": "network",
-                },
-                operation="network_request",
-            )
-
-        self._display_user_facing_error(user_error, f"Network: {url}")
-
     def permission_error(
         self, error: Exception, resource: Optional[str] = None
     ) -> None:
