@@ -5,9 +5,10 @@ Rich-based user interfaces, plain text, and structured JSON output.
 """
 
 import json
+import logging
 import sys
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -1224,5 +1225,497 @@ def get_formatter(config: LoggingConfig) -> OutputFormatter:
         return RichFormatter(config)
     elif config.output_format == OutputFormat.JSON:
         return JSONFormatter(config)
-    else:  # PLAIN
+    else:
         return PlainFormatter(config)
+
+
+# Developer Error System Formatters
+
+
+class DeveloperErrorFormatter:
+    """Formatter for developer errors with structured output capabilities."""
+
+    def __init__(self, format_type: str = "json", include_metadata: bool = True):
+        """Initialize the developer error formatter.
+
+        Args:
+            format_type: Output format (json, text, rich)
+            include_metadata: Whether to include metadata in output
+        """
+        self.format_type = format_type.lower()
+        self.include_metadata = include_metadata
+        self.console = Console()
+
+    def format_developer_error(self, error: "DeveloperError") -> str:
+        """Format a developer error according to the specified format.
+
+        Args:
+            error: Developer error to format
+
+        Returns:
+            Formatted error string
+        """
+        if self.format_type == "json":
+            return self._format_as_json(error)
+        elif self.format_type == "rich":
+            return self._format_as_rich(error)
+        else:
+            return self._format_as_text(error)
+
+    def _format_as_json(self, error: "DeveloperError") -> str:
+        """Format developer error as JSON with metadata."""
+        output_data = {
+            "error_id": error.error_id,
+            "error_code": error.error_code,
+            "category": error.category,
+            "severity": error.severity,
+            "title": error.title,
+            "message": error.message,
+            "exception_type": error.exception_type,
+            "exception_message": error.exception_message,
+            "created_at": error.created_at,
+            "updated_at": error.updated_at,
+        }
+
+        if self.include_metadata:
+            output_data.update(
+                {
+                    "context": self._format_context_as_dict(error.context),
+                    "stack_frames": self._format_stack_frames_as_dict(
+                        error.stack_frames
+                    ),
+                    "debug_info": error.debug_info,
+                    "related_errors": error.related_errors,
+                }
+            )
+
+        return json.dumps(output_data, indent=2, default=str)
+
+    def _format_as_text(self, error: "DeveloperError") -> str:
+        """Format developer error as human-readable text."""
+        lines = [
+            "Developer Error Report",
+            "=====================",
+            "",
+            f"Error ID: {error.error_id}",
+            f"Error Code: {error.error_code}",
+            f"Category: {error.category}",
+            f"Severity: {error.severity}",
+            "",
+            f"Title: {error.title}",
+            f"Message: {error.message}",
+            "",
+            f"Exception Type: {error.exception_type}",
+            f"Exception Message: {error.exception_message}",
+            "",
+            f"Created: {error.created_at}",
+        ]
+
+        if error.updated_at:
+            lines.append(f"Updated: {error.updated_at}")
+
+        if self.include_metadata:
+            lines.extend(
+                [
+                    "",
+                    "Context Information:",
+                    "-------------------",
+                    self._format_context_as_text(error.context),
+                    "",
+                    "Stack Trace:",
+                    "-------------",
+                    error.stack_trace,
+                ]
+            )
+
+            if error.stack_frames:
+                lines.extend(
+                    [
+                        "",
+                        "Stack Frames:",
+                        "--------------",
+                        self._format_stack_frames_as_text(error.stack_frames),
+                    ]
+                )
+
+            if error.debug_info:
+                lines.extend(
+                    [
+                        "",
+                        "Debug Information:",
+                        "------------------",
+                        self._format_debug_info_as_text(error.debug_info),
+                    ]
+                )
+
+        return "\n".join(lines)
+
+    def _format_as_rich(self, error: "DeveloperError") -> str:
+        """Format developer error using Rich for enhanced display."""
+        # Create main error panel
+        error_text = Text()
+        error_text.append(f"Error ID: {error.error_id}\n", style="bold cyan")
+        error_text.append(f"Error Code: {error.error_code}\n", style="bold yellow")
+        error_text.append(f"Category: {error.category}\n", style="bold magenta")
+        error_text.append(
+            f"Severity: {error.severity}\n",
+            style=self._get_severity_style(error.severity),
+        )
+        error_text.append(f"\nTitle: {error.title}\n", style="bold red")
+        error_text.append(f"Message: {error.message}\n", style="white")
+        error_text.append(f"\nException: {error.exception_type}\n", style="bold")
+        error_text.append(f"Details: {error.exception_message}\n", style="white")
+
+        error_panel = Panel(
+            error_text,
+            title="Developer Error",
+            border_style="red",
+            padding=(1, 2),
+        )
+
+        # Create context table
+        context_table = self._create_context_table(error.context)
+
+        # Create stack trace
+        from rich.traceback import Traceback
+
+        stack_trace = Traceback.from_exception(
+            type(Exception(error.exception_message)),
+            Exception(error.exception_message),
+            None,
+            show_locals=True,
+        )
+
+        # Combine all components
+        output = f"{error_panel}\n\n{context_table}\n\n{stack_trace}"
+
+        return output
+
+    def _get_severity_style(self, severity: "DeveloperErrorSeverity") -> str:
+        """Get Rich style for error severity."""
+        severity_styles = {
+            "debug": "dim",
+            "info": "blue",
+            "warning": "yellow",
+            "error": "red",
+            "critical": "bold red",
+        }
+        return severity_styles.get(severity, "white")
+
+    def _create_context_table(self, context: "DeveloperErrorContext") -> str:
+        """Create Rich table for context information."""
+        table = Table(
+            title="Error Context", show_header=True, header_style="bold magenta"
+        )
+        table.add_column("Property", style="cyan")
+        table.add_column("Value", style="white")
+
+        table.add_row("Operation", context.operation)
+        table.add_row("Component", context.component)
+        table.add_row("Function", context.function_name)
+        table.add_row("Timestamp", context.timestamp)
+
+        if context.session_id:
+            table.add_row("Session ID", context.session_id)
+        if context.request_id:
+            table.add_row("Request ID", context.request_id)
+        if context.python_version:
+            table.add_row("Python Version", context.python_version)
+        if context.platform_info:
+            table.add_row("Platform", context.platform_info)
+
+        return str(table)
+
+    def _format_context_as_dict(
+        self, context: "DeveloperErrorContext"
+    ) -> Dict[str, Any]:
+        """Format context as dictionary for JSON output."""
+        return {
+            "operation": context.operation,
+            "component": context.component,
+            "function_name": context.function_name,
+            "timestamp": context.timestamp,
+            "session_id": context.session_id,
+            "request_id": context.request_id,
+            "python_version": context.python_version,
+            "platform_info": context.platform_info,
+            "memory_usage": context.memory_usage,
+            "cpu_usage": context.cpu_usage,
+            "user_input": context.user_input,
+            "environment": context.environment,
+            "metadata": context.metadata,
+        }
+
+    def _format_context_as_text(self, context: "DeveloperErrorContext") -> str:
+        """Format context as text."""
+        lines = [
+            f"Operation: {context.operation}",
+            f"Component: {context.component}",
+            f"Function: {context.function_name}",
+            f"Timestamp: {context.timestamp}",
+        ]
+
+        if context.session_id:
+            lines.append(f"Session ID: {context.session_id}")
+        if context.request_id:
+            lines.append(f"Request ID: {context.request_id}")
+        if context.python_version:
+            lines.append(f"Python Version: {context.python_version}")
+        if context.platform_info:
+            lines.append(f"Platform: {context.platform_info}")
+
+        if context.memory_usage:
+            lines.append(f"Memory Usage: {context.memory_usage}")
+        if context.cpu_usage:
+            lines.append(f"CPU Usage: {context.cpu_usage}")
+
+        if context.user_input:
+            lines.append(f"User Input: {context.user_input}")
+        if context.environment:
+            lines.append(f"Environment: {context.environment}")
+        if context.metadata:
+            lines.append(f"Metadata: {context.metadata}")
+
+        return "\n".join(lines)
+
+    def _format_stack_frames_as_dict(
+        self, stack_frames: List["StackFrame"]
+    ) -> List[Dict[str, Any]]:
+        """Format stack frames as dictionary for JSON output."""
+        return [
+            {
+                "filename": frame.filename,
+                "line_number": frame.line_number,
+                "function_name": frame.function_name,
+                "code_context": frame.code_context,
+                "local_variables": frame.local_variables,
+            }
+            for frame in stack_frames
+        ]
+
+    def _format_stack_frames_as_text(self, stack_frames: List["StackFrame"]) -> str:
+        """Format stack frames as text."""
+        lines = []
+        for i, frame in enumerate(stack_frames):
+            lines.append(f"Frame {i + 1}:")
+            lines.append(f"  File: {frame.filename}")
+            lines.append(f"  Line: {frame.line_number}")
+            lines.append(f"  Function: {frame.function_name}")
+
+            if frame.code_context:
+                lines.append("  Code Context:")
+                lines.append(f"    {frame.code_context.strip()}")
+
+            if frame.local_variables:
+                lines.append("  Local Variables:")
+                for var_name, var_value in frame.local_variables.items():
+                    lines.append(f"    {var_name}: {var_value}")
+
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def _format_debug_info_as_text(self, debug_info: Dict[str, Any]) -> str:
+        """Format debug information as text."""
+        lines = []
+        for key, value in debug_info.items():
+            if isinstance(value, dict):
+                lines.append(f"{key}:")
+                for sub_key, sub_value in value.items():
+                    lines.append(f"  {sub_key}: {sub_value}")
+            else:
+                lines.append(f"{key}: {value}")
+        return "\n".join(lines)
+
+
+class DeveloperErrorLogFormatter(logging.Formatter):
+    """Custom logging formatter for developer errors with structured output."""
+
+    def __init__(
+        self,
+        fmt: Optional[str] = None,
+        datefmt: Optional[str] = None,
+        style: str = "%",
+        include_metadata: bool = True,
+        format_type: str = "structured",
+    ):
+        """Initialize the developer error log formatter.
+
+        Args:
+            fmt: Log format string
+            datefmt: Date format string
+            style: Logging style
+            include_metadata: Whether to include metadata
+            format_type: Output format type
+        """
+        super().__init__(fmt, datefmt, style)
+        self.include_metadata = include_metadata
+        self.format_type = format_type
+        self.error_formatter = DeveloperErrorFormatter(format_type, include_metadata)
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format the log record."""
+        # Check if this is a developer error record
+        if hasattr(record, "developer_error") and record.developer_error:
+            return self._format_developer_error(record.developer_error)
+
+        # Check if the message contains developer error data
+        if hasattr(record, "error_data") and record.error_data:
+            return self._format_error_data(record.error_data)
+
+        # Default formatting
+        return super().format(record)
+
+    def _format_developer_error(self, error: "DeveloperError") -> str:
+        """Format a developer error."""
+        return self.error_formatter.format_developer_error(error)
+
+    def _format_error_data(self, error_data: Dict[str, Any]) -> str:
+        """Format error data dictionary."""
+        if self.format_type == "json":
+            return json.dumps(error_data, indent=2, default=str)
+        else:
+            return self._format_error_data_as_text(error_data)
+
+    def _format_error_data_as_text(self, error_data: Dict[str, Any]) -> str:
+        """Format error data as text."""
+        lines = []
+        for key, value in error_data.items():
+            if isinstance(value, dict):
+                lines.append(f"{key}:")
+                for sub_key, sub_value in value.items():
+                    lines.append(f"  {sub_key}: {sub_value}")
+            else:
+                lines.append(f"{key}: {value}")
+        return "\n".join(lines)
+
+
+class StructuredDeveloperErrorFormatter:
+    """Structured formatter for developer errors with metadata and location information."""
+
+    def __init__(self, include_location: bool = True, include_timestamp: bool = True):
+        """Initialize the structured formatter.
+
+        Args:
+            include_location: Whether to include location information
+            include_timestamp: Whether to include timestamp information
+        """
+        self.include_location = include_location
+        self.include_timestamp = include_timestamp
+
+    def format_error(self, error: "DeveloperError") -> Dict[str, Any]:
+        """Format developer error with structured metadata.
+
+        Args:
+            error: Developer error to format
+
+        Returns:
+            Structured error dictionary
+        """
+        formatted_error = {
+            "error_id": error.error_id,
+            "error_code": error.error_code,
+            "category": error.category,
+            "severity": error.severity,
+            "title": error.title,
+            "message": error.message,
+            "exception_type": error.exception_type,
+            "exception_message": error.exception_message,
+        }
+
+        if self.include_timestamp:
+            formatted_error.update(
+                {
+                    "created_at": error.created_at,
+                    "updated_at": error.updated_at,
+                }
+            )
+
+        if self.include_location:
+            formatted_error.update(
+                {
+                    "location": self._extract_location_info(error),
+                }
+            )
+
+        # Add metadata
+        formatted_error.update(
+            {
+                "context": self._format_context_metadata(error.context),
+                "stack_trace": error.stack_trace,
+                "stack_frames": self._format_stack_frames_metadata(error.stack_frames),
+                "debug_info": error.debug_info,
+                "related_errors": error.related_errors,
+            }
+        )
+
+        return formatted_error
+
+    def _extract_location_info(self, error: "DeveloperError") -> Dict[str, Any]:
+        """Extract location information from error."""
+        location_info = {
+            "component": error.context.component,
+            "operation": error.context.operation,
+            "function": error.context.function_name,
+        }
+
+        # Extract file and line from first stack frame
+        if error.stack_frames:
+            first_frame = error.stack_frames[0]
+            location_info.update(
+                {
+                    "file": first_frame.filename,
+                    "line": first_frame.line_number,
+                    "function_name": first_frame.function_name,
+                }
+            )
+
+        return location_info
+
+    def _format_context_metadata(
+        self, context: "DeveloperErrorContext"
+    ) -> Dict[str, Any]:
+        """Format context metadata."""
+        metadata = {
+            "operation": context.operation,
+            "component": context.component,
+            "function_name": context.function_name,
+            "session_id": context.session_id,
+            "request_id": context.request_id,
+        }
+
+        # Add system information
+        if context.python_version:
+            metadata["python_version"] = context.python_version
+        if context.platform_info:
+            metadata["platform_info"] = context.platform_info
+
+        # Add resource usage
+        if context.memory_usage:
+            metadata["memory_usage"] = context.memory_usage
+        if context.cpu_usage:
+            metadata["cpu_usage"] = context.cpu_usage
+
+        return metadata
+
+    def _format_stack_frames_metadata(
+        self, stack_frames: List["StackFrame"]
+    ) -> List[Dict[str, Any]]:
+        """Format stack frames metadata."""
+        return [
+            {
+                "filename": frame.filename,
+                "line_number": frame.line_number,
+                "function_name": frame.function_name,
+                "is_application": self._is_application_file(frame.filename),
+                "code_context": frame.code_context,
+                "local_variables_count": len(frame.local_variables)
+                if frame.local_variables
+                else 0,
+            }
+            for frame in stack_frames
+        ]
+
+    def _is_application_file(self, filename: str) -> bool:
+        """Check if a file is part of the application code."""
+        return "app/" in filename or "readme-mentor" in filename

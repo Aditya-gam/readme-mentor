@@ -4,9 +4,21 @@ This module provides a comprehensive error handling system that categorizes erro
 generates actionable suggestions, and presents clear, non-technical messages to users.
 """
 
+from ..models import (
+    DeveloperErrorCategory,
+    DeveloperErrorCode,
+    DeveloperErrorSeverity,
+)
 from .exceptions import (
+    CodeExecutionError,
     ConfigurationError,
+    DependencyError,
+    # Developer Error System Exceptions
+    DeveloperError,
+    IntegrationError,
+    MemoryManagementError,
     NetworkError,
+    PerformanceError,
     PermissionError,
     ReadmeMentorError,
     ResourceError,
@@ -14,19 +26,31 @@ from .exceptions import (
     ValidationError,
 )
 from .handlers import (
+    CodeExecutionErrorHandler,
     ConfigurationErrorHandler,
+    DependencyErrorHandler,
+    # Developer Error System Handlers
+    DeveloperErrorHandler,
     ErrorHandlerRegistry,
+    IntegrationErrorHandler,
+    MemoryManagementErrorHandler,
     NetworkErrorHandler,
+    PerformanceErrorHandler,
     PermissionErrorHandler,
     ResourceErrorHandler,
     SystemErrorHandler,
     ValidationErrorHandler,
 )
 from .manager import (
+    # Developer Error System Manager
+    DeveloperErrorManager,
     ErrorContext,
     ErrorManager,
+    create_developer_error,
     create_user_facing_error,
+    get_developer_error_manager,
     get_error_manager,
+    handle_developer_exception,
     handle_exception,
 )
 from .suggestions import SuggestionGenerator
@@ -55,4 +79,21 @@ __all__ = [
     "ValidationError",
     "ResourceError",
     "SystemError",
+    # Developer Error System
+    "DeveloperError",
+    "CodeExecutionError",
+    "MemoryManagementError",
+    "PerformanceError",
+    "IntegrationError",
+    "DependencyError",
+    "DeveloperErrorHandler",
+    "CodeExecutionErrorHandler",
+    "MemoryManagementErrorHandler",
+    "PerformanceErrorHandler",
+    "IntegrationErrorHandler",
+    "DependencyErrorHandler",
+    "DeveloperErrorManager",
+    "get_developer_error_manager",
+    "handle_developer_exception",
+    "create_developer_error",
 ]
