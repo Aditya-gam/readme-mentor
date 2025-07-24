@@ -30,36 +30,6 @@ from ..models import (
 from .handlers import ErrorHandlerRegistry
 
 
-class ErrorContext:
-    """Context manager for error tracking."""
-
-    def __init__(self, operation: str, component: str, **kwargs: Any):
-        """Initialize error context.
-
-        Args:
-            operation: Current operation being performed
-            component: Component where the operation is happening
-            **kwargs: Additional context information
-        """
-        self.operation = operation
-        self.component = component
-        self.timestamp = datetime.now().isoformat()
-        self.user_input = kwargs.get("user_input")
-        self.environment = kwargs.get("environment")
-        self.metadata = kwargs.get("metadata", {})
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert context to dictionary."""
-        return {
-            "operation": self.operation,
-            "component": self.component,
-            "timestamp": self.timestamp,
-            "user_input": self.user_input,
-            "environment": self.environment,
-            "metadata": self.metadata,
-        }
-
-
 class ErrorManager:
     """Centralized error management system."""
 
@@ -227,7 +197,7 @@ class ErrorManager:
         except Exception as e:
             # Handle the exception and re-raise as user-facing error
             user_error = self.handle_exception(e, context)
-            raise user_error
+            raise user_error from e
 
     def create_user_facing_error(
         self,
@@ -828,7 +798,7 @@ class DeveloperErrorManager:
         except Exception as e:
             # Handle the exception with developer error system
             developer_error = self.handle_developer_exception(e, context)
-            raise developer_error
+            raise developer_error from e
 
     def create_developer_error(
         self,

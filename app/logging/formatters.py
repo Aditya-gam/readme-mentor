@@ -15,6 +15,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from ..models import (
+    DeveloperError,
+    DeveloperErrorContext,
+    DeveloperErrorSeverity,
+    StackFrame,
+)
 from .config import LoggingConfig
 from .enums import OutputFormat
 
