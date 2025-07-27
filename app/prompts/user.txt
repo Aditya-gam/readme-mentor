@@ -1,0 +1,5 @@
+Context: {context}
+
+Question: {question}
+
+Remember: If a simple answer exists in the README, use it. Don't overcomplicate or elaborate unnecessarily. Be direct and concise.

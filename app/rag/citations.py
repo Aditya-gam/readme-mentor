@@ -109,10 +109,10 @@ def _cleanup_placeholders(answer_text: str) -> str:
 
 
 def _truncate_answer(answer_text: str) -> str:
-    """Truncate answer to ~120 words."""
+    """Truncate answer to ~200 words to allow for more complete answers."""
     words = answer_text.split()
-    if len(words) > 120:
-        answer_text = " ".join(words[:120]) + "..."
+    if len(words) > 200:
+        answer_text = " ".join(words[:200]) + "..."
     return answer_text
 
 

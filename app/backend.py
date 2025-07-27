@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from app.embeddings.ingest import get_embedding_model, get_vector_store
 from app.llm.provider import get_chat_model
+from app.metrics import get_metrics_collector
 from app.models import QuestionPayload
 from app.rag.chain import get_qa_chain
 from app.rag.citations import render_citations
@@ -58,12 +59,32 @@ def generate_answer(
     if history is None:
         history = []
 
+    # Get metrics collector for tracking
+    collector = get_metrics_collector()
+
+    # Start operation tracking
+    operation_id = collector.start_operation(
+        "generate_answer",
+        metadata={
+            "query": query[:100],  # Truncate for metadata
+            "repo_id": repo_id,
+            "history_length": len(history),
+        },
+    )
+
     start_time = time.perf_counter()
 
     try:
         # Step 1: Validate input payload using Pydantic model
         logger.info(f"Validating input for repo_id: {repo_id}")
+        validation_start = time.time()
         payload = QuestionPayload(query=query, repo_id=repo_id, history=history)
+        validation_duration = time.time() - validation_start
+
+        # Record validation timing
+        collector.add_component_timing(
+            operation_id, "input_validation", validation_duration
+        )
 
         # Extract validated values
         repo_id = payload.repo_id
@@ -74,13 +95,27 @@ def generate_answer(
 
         # Step 2: Load or retrieve the vector store for the given repo_id
         logger.info(f"Loading vector store for repository: {repo_id}")
+        vector_store_start = time.time()
         embedding_model = get_embedding_model()
         vector_store = get_vector_store(repo_id, embedding_model)
+        vector_store_duration = time.time() - vector_store_start
+
+        # Record vector store loading timing
+        collector.add_component_timing(
+            operation_id, "vector_store_loading", vector_store_duration
+        )
 
         # Step 3: Get the LLM and QA chain
         logger.info("Initializing LLM and QA chain")
+        chain_init_start = time.time()
         llm = get_chat_model()
         qa_chain = get_qa_chain(vector_store, llm)
+        chain_init_duration = time.time() - chain_init_start
+
+        # Record chain initialization timing
+        collector.add_component_timing(
+            operation_id, "chain_initialization", chain_init_duration
+        )
 
         # Step 4: Prepare conversation input
         # Convert history to the format expected by ConversationalRetrievalChain
@@ -95,7 +130,14 @@ def generate_answer(
 
         # Step 5: Execute the chain with return_source_documents=True
         logger.info("Executing QA chain")
+        qa_execution_start = time.time()
         result = qa_chain.invoke({"question": query, "chat_history": chat_history})
+        qa_execution_duration = time.time() - qa_execution_start
+
+        # Record QA execution timing
+        collector.add_component_timing(
+            operation_id, "qa_execution", qa_execution_duration
+        )
 
         # Extract the raw answer and source documents
         raw_answer = result.get("answer", "")
@@ -111,16 +153,42 @@ def generate_answer(
 
         # Step 6: Post-process the LLM's answer with citations
         logger.info("Processing answer with citations")
+        citation_start = time.time()
         final_answer = render_citations(raw_answer, source_documents)
+        citation_duration = time.time() - citation_start
+
+        # Record citation processing timing
+        collector.add_component_timing(
+            operation_id, "citation_processing", citation_duration
+        )
 
         # Step 7: Prepare structured citation metadata
+        metadata_start = time.time()
         citations = _extract_citation_metadata(source_documents)
+        metadata_duration = time.time() - metadata_start
+
+        # Record metadata extraction timing
+        collector.add_component_timing(
+            operation_id, "metadata_extraction", metadata_duration
+        )
 
         # Step 8: Measure latency
         end_time = time.perf_counter()
         latency_ms = round((end_time - start_time) * 1000, 2)
 
         logger.info(f"Answer generation completed in {latency_ms}ms")
+
+        # End operation tracking with success
+        collector.end_operation(
+            operation_id,
+            success=True,
+            additional_metadata={
+                "latency_ms": latency_ms,
+                "answer_length": len(final_answer),
+                "citations_count": len(citations),
+                "source_documents_count": len(source_documents),
+            },
+        )
 
         # Step 9: Return structured output
         return {
@@ -131,6 +199,18 @@ def generate_answer(
 
     except ValidationError as e:
         logger.error(f"Input validation failed: {e.errors()}")
+
+        # End operation tracking with validation error
+        collector.end_operation(
+            operation_id,
+            success=False,
+            error_count=1,
+            additional_metadata={
+                "error_type": "validation_error",
+                "error_details": str(e.errors()),
+            },
+        )
+
         # Provide more user-friendly error messages
         error_messages = []
         for error in e.errors():
@@ -165,14 +245,44 @@ def generate_answer(
 
     except ValueError as e:
         logger.error(f"Value error during processing: {e}")
+
+        # End operation tracking with value error
+        collector.end_operation(
+            operation_id,
+            success=False,
+            error_count=1,
+            additional_metadata={"error_type": "value_error", "error_message": str(e)},
+        )
         raise
 
     except RuntimeError as e:
         logger.error(f"Runtime error (likely LLM backend issue): {e}")
+
+        # End operation tracking with runtime error
+        collector.end_operation(
+            operation_id,
+            success=False,
+            error_count=1,
+            additional_metadata={
+                "error_type": "runtime_error",
+                "error_message": str(e),
+            },
+        )
         raise
 
     except Exception as e:
         logger.error(f"Unexpected error during answer generation: {e}")
+
+        # End operation tracking with unexpected error
+        collector.end_operation(
+            operation_id,
+            success=False,
+            error_count=1,
+            additional_metadata={
+                "error_type": "unexpected_error",
+                "error_message": str(e),
+            },
+        )
         raise RuntimeError(f"Failed to generate answer: {e}") from e
 
 
