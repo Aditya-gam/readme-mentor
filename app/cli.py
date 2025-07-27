@@ -621,7 +621,7 @@ def _display_answer_with_metadata(result: dict, chat_session: ChatSession):
 
 def _process_question(question: str, repo_id: str, chat_session: ChatSession):
     """Process a question and display the answer."""
-    from .rag.chain import generate_answer
+    from .backend import generate_answer
 
     user_output = chat_session.user_output
 
